@@ -1,0 +1,5 @@
+.env
+test_dataset/
+test_dataset_v2/
+tokenizers/
+encode_data.csv

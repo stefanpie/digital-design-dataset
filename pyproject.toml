@@ -1,0 +1,61 @@
+[project]
+name = "digital-design-dataset"
+version = "0.0.1"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = []
+keywords = [
+    "FPGA",
+    "Electronic Design Automation",
+]
+classifiers = []
+requires-python = ">=3.11"
+
+dependencies = []
+
+[project.optional-dependencies]
+docs = ["sphinx", "furo", "sphinx-autodoc-typehints"]
+test = ["pytest"]
+
+[project.urls]
+# "Homepage" = ""
+# "Repository" = "" 
+# "Documentation" = ""
+
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["digital_design_dataset"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["-s"]
+log_cli = true
+
+
+[tool.ruff]
+line-length = 88
+preview = true
+exclude = [
+    "*.ipynb"
+]
+
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "CPY",
+    "D",
+    "FIX",
+    "TD",
+    "TRY003",
+    "EM101",
+    "EM102",
+    "FBT001",
+    "FBT002",
+    "RET504",
+    "E266",
+]
