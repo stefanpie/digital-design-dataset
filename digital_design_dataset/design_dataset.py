@@ -3,6 +3,7 @@ import operator
 import os
 import re
 import shutil
+from collections import Counter
 from pathlib import Path
 
 from github import Auth, Github
@@ -97,6 +98,18 @@ class DesignDataset:
     def index_generator(self) -> None:
         raise NotImplementedError
 
+    def summary(self) -> str:
+        summary = f"Dataset at {self.dataset_dir}\n"
+        summary += f"Number of designs: {len(self.index)}\n"
+        dataset_name_counter = Counter(design["dataset_name"] for design in self.index)
+        summary += "Datasets + Design Counts:\n"
+        for dataset_name, count in dataset_name_counter.items():
+            summary += f"    {dataset_name}: {count}\n"
+        return summary
+
+    def print_summary(self) -> None:
+        print(self.summary())  # noqa: T201
+
     def get_design_metadata_by_design_name(self, design_name: str) -> dict | None:
         """Retrieves the metadata of a design based on its design name.
 
@@ -175,3 +188,10 @@ class DesignDataset:
         design_sources_dir = self.designs_dir / design_name / "sources"
         source_files = list(design_sources_dir.iterdir())
         return source_files
+
+    def delete_design(self, design_name: str) -> None:
+        design = self.get_design_metadata_by_design_name(design_name)
+        if design is None:
+            raise ValueError(f"Design {design_name} not found in dataset.")
+        design_dir = self.designs_dir / design_name
+        shutil.rmtree(design_dir)

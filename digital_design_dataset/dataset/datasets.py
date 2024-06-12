@@ -1,12 +1,16 @@
 import base64
+import gzip
 import io
 import json
 import os
 import re
 import shutil
+import subprocess
+import tarfile
 import zipfile
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import ClassVar
 
 import py7zr
 import requests
@@ -17,6 +21,7 @@ from digital_design_dataset.design_dataset import (
     SOURCE_FILES_EXTENSIONS_SET,
     DesignDataset,
 )
+from digital_design_dataset.utils import auto_find_bin
 
 
 def get_file_from_github(
@@ -34,7 +39,7 @@ def get_file_from_github(
         data = data[0]
 
     content = data.content
-    if content == "":
+    if not content:
         download_url = data.download_url
         r = requests.get(download_url, timeout=timeout)
         # if r.status_code != requests.status_codes.codes.ok:
@@ -446,9 +451,11 @@ class ISCAS85DatasetRetriever(DatasetRetriever):
         temp_dir = TemporaryDirectory()
         temp_dir_fp = Path(temp_dir.name)
         temp_file_fp = temp_dir_fp / "iscas.7z"
-        with requests.get(self.ISCAS_85_89_URL, stream=True) as r:
-            with temp_file_fp.open("wb") as f:
-                shutil.copyfileobj(r.raw, f)
+        with (
+            requests.get(self.ISCAS_85_89_URL, stream=True) as r,
+            temp_file_fp.open("wb") as f,
+        ):
+            shutil.copyfileobj(r.raw, f)
 
         filter_pattern = re.compile(r"Verilog/c.*?\.v")
         with py7zr.SevenZipFile(temp_file_fp, "r") as archive:
@@ -496,9 +503,12 @@ class ISCAS89DatasetRetriever(DatasetRetriever):
         temp_dir = TemporaryDirectory()
         temp_dir_fp = Path(temp_dir.name)
         temp_file_fp = temp_dir_fp / "iscas.7z"
-        with requests.get(self.ISCAS_85_89_URL, stream=True) as r:
-            with temp_file_fp.open("wb") as f:
-                shutil.copyfileobj(r.raw, f)
+
+        with (
+            requests.get(self.ISCAS_85_89_URL, stream=True) as r,
+            temp_file_fp.open("wb") as f,
+        ):
+            shutil.copyfileobj(r.raw, f)
 
         with py7zr.SevenZipFile(temp_file_fp, "r") as archive:
             extra_files = ["Verilog/lib.v", "Verilog/DFF2.v"]
@@ -544,26 +554,26 @@ class ISCAS89DatasetRetriever(DatasetRetriever):
 
 
 class LGSynth89DatasetRetriever(DatasetRetriever):
-    name: str = "lgsynth89"
-    type: str = "academic"
+    dataset_name: str = "lgsynth89"
+    dataset_type: str = "academic"
 
-    LGSYNTH_89_URL = "https://ddd.fit.cvut.cz/www/prj/Benchmarks/LGSynth89.7z"
+    LGSYNTH89_URL = "https://ddd.fit.cvut.cz/www/prj/Benchmarks/LGSynth89.7z"
 
     def get_dataset(self, overwrite: bool = False) -> None:
         temp_dir = TemporaryDirectory()
         temp_dir_fp = Path(temp_dir.name)
         temp_file_fp = temp_dir_fp / "lgsynth89.7z"
-        with requests.get(self.LGSYNTH_89_URL, stream=True) as r:
-            with temp_file_fp.open("wb") as f:
-                shutil.copyfileobj(r.raw, f)
+        with (
+            requests.get(self.LGSYNTH89_URL, stream=True, timeout=10) as r,
+            temp_file_fp.open("wb") as f,
+        ):
+            shutil.copyfileobj(r.raw, f)
 
         filter_pattern = re.compile(r"LGSynth89/Verilog/.*?_orig\.v")
         with py7zr.SevenZipFile(temp_file_fp, "r") as archive:
-            lgsynth89_verilog_files = [
-                n for n in archive.getnames() if filter_pattern.match(n)
-            ]
+            verilog_files = [n for n in archive.getnames() if filter_pattern.match(n)]
 
-            for file_name in lgsynth89_verilog_files:
+            for file_name in verilog_files:
                 case_name = file_name.split("/")[-1].replace("_orig.v", "")
                 design_name = f"lgsynth89_{case_name}"
 
@@ -574,8 +584,8 @@ class LGSynth89DatasetRetriever(DatasetRetriever):
 
                 metadata = {}
                 metadata["design_name"] = design_name
-                metadata["dataset_name"] = self.name
-                metadata["dataset_type"] = self.type
+                metadata["dataset_name"] = self.dataset_name
+                metadata["dataset_type"] = self.dataset_type
                 metadata_fp = design_dir / "design.json"
                 metadata_fp.write_text(json.dumps(metadata, indent=4))
 
@@ -588,3 +598,394 @@ class LGSynth89DatasetRetriever(DatasetRetriever):
                 new_fp = source_file_dir / Path(file_name).name
                 current_fp.rename(new_fp)
                 shutil.rmtree(source_file_dir / "LGSynth89")
+
+
+class LGSynth91DatasetRetriever(DatasetRetriever):
+    dataset_name: str = "lgsynth91"
+    dataset_type: str = "academic"
+
+    LGSYNTH91_URL = "https://ddd.fit.cvut.cz/www/prj/Benchmarks/LGSynth91.7z"
+
+    def get_dataset(self, overwrite: bool = False) -> None:
+        temp_dir = TemporaryDirectory()
+        temp_dir_fp = Path(temp_dir.name)
+        temp_file_fp = temp_dir_fp / "lgsynth89.7z"
+        with (
+            requests.get(self.LGSYNTH91_URL, stream=True, timeout=10) as r,
+            temp_file_fp.open("wb") as f,
+        ):
+            shutil.copyfileobj(r.raw, f)
+
+        filter_pattern = re.compile(r"LGSynth91/Verilog/.*?/.*?_orig\.v")
+        with py7zr.SevenZipFile(temp_file_fp, "r") as archive:
+            verilog_files = [n for n in archive.getnames() if filter_pattern.match(n)]
+
+            for file_name in verilog_files:
+                case_name = file_name.split("/")[-1].replace("_orig.v", "")
+                design_name = f"lgsynth91_{case_name}"
+
+                design_dir = self.design_dataset.designs_dir / design_name
+                if design_dir.exists():
+                    shutil.rmtree(design_dir)
+                design_dir.mkdir(parents=True, exist_ok=True)
+
+                metadata = {}
+                metadata["design_name"] = design_name
+                metadata["dataset_name"] = self.dataset_name
+                metadata["dataset_type"] = self.dataset_type
+                metadata_fp = design_dir / "design.json"
+                metadata_fp.write_text(json.dumps(metadata, indent=4))
+
+                source_file_dir = design_dir / "sources"
+                source_file_dir.mkdir(parents=True, exist_ok=True)
+                archive.extract(targets=[file_name], path=source_file_dir)
+                archive.reset()
+
+                current_fp = source_file_dir / Path(file_name)
+                new_fp = source_file_dir / Path(file_name).name
+                current_fp.rename(new_fp)
+                shutil.rmtree(source_file_dir / "LGSynth91")
+
+
+RE_BLIF_BROKEN_CONSTANT = re.compile(r"(.names +.*? *\n) *([0,1,-]) *$", re.MULTILINE)
+
+
+def fix_blif_constant_expr(fp: Path) -> None:
+    t = fp.read_text()
+
+    const_exprs = []
+
+    matches = RE_BLIF_BROKEN_CONSTANT.finditer(t)
+    for match in matches:
+        whole = match.group(0)
+        name_line = match.group(1)
+        const = match.group(2)
+        name_line = name_line.replace("  ", " ")
+        if const == "0":
+            new_str = name_line + f"{const}"
+        if const == "1":
+            new_str = name_line + f"{const}"
+        if const == "-":
+            new_str = " "
+        # new_str.removesuffix("\n")
+        const_exprs.append(new_str)
+        t = t.replace(match.group(0), "")
+
+    lines = t.splitlines()
+    # find the ".end" line
+    end_line_idx = lines.index(".end")
+    # insert the new constant expressions before the ".end" line
+    for const_expr in const_exprs:
+        lines.insert(end_line_idx, const_expr)
+
+    t = "\n".join(lines)
+
+    fp.write_text(t)
+
+
+RE_BLIF_MODEL = re.compile(r"\.model +(.+)(:?.|\n)*?\.end", re.MULTILINE)
+
+
+def fix_blif_duplicate_model_definition(fp: Path) -> None:
+    t = fp.read_text()
+    models = RE_BLIF_MODEL.finditer(t)
+    model_data = [
+        (
+            match.group(0),
+            match.group(1),
+        )
+        for match in models
+    ]
+    seen_models = set()
+    for model_text, model_name in model_data:
+        if model_name in seen_models:
+            t = t.replace(model_text, "\n\n")
+        else:
+            seen_models.add(model_name)
+
+    fp.write_text(t)
+
+
+class IWLS93DatasetRetriever(DatasetRetriever):
+    dataset_name: str = "iwls93"
+    dataset_type: str = "academic"
+
+    IWLS93_URL = "https://ddd.fit.cvut.cz/www/prj/Benchmarks/IWLS93.7z"
+
+    BLACKLIST = ["diffeq", "elliptic", "frisc", "tseng"]
+
+    def get_dataset(self, overwrite: bool = False) -> None:
+        yosys_bin = auto_find_bin("yosys")
+        if yosys_bin is None:
+            raise RuntimeError(
+                "Yosys is needed to preprocess the IWLS93 dataset. "
+                "Yosys was not found in PATH or in the "
+                "YOSYS_PATH environment variable.",
+            )
+
+        temp_dir = TemporaryDirectory()
+        temp_dir_fp = Path(temp_dir.name)
+        temp_file_fp = temp_dir_fp / "lgsynth89.7z"
+        with (
+            requests.get(self.IWLS93_URL, stream=True, timeout=10) as r,
+            temp_file_fp.open("wb") as f,
+        ):
+            shutil.copyfileobj(r.raw, f)
+
+        filter_pattern = re.compile(r"blif/.*?\.blif")
+        with py7zr.SevenZipFile(temp_file_fp, "r") as archive:
+            blif_files = [n for n in archive.getnames() if filter_pattern.match(n)]
+
+            for file_name in blif_files:
+                base_name = file_name.split("/")[-1].replace(".blif", "")
+
+                if base_name in self.BLACKLIST:
+                    continue
+
+                design_name = f"iwls93_{base_name}"
+
+                design_dir = self.design_dataset.designs_dir / design_name
+                if design_dir.exists():
+                    shutil.rmtree(design_dir)
+                design_dir.mkdir(parents=True, exist_ok=True)
+
+                metadata = {}
+                metadata["design_name"] = design_name
+                metadata["dataset_name"] = self.dataset_name
+                metadata["dataset_type"] = self.dataset_type
+                metadata_fp = design_dir / "design.json"
+                metadata_fp.write_text(json.dumps(metadata, indent=4))
+
+                source_file_dir = design_dir / "sources_blif"
+                source_file_dir.mkdir(parents=True, exist_ok=True)
+                archive.extract(targets=[file_name], path=source_file_dir)
+                archive.reset()
+
+                current_fp = source_file_dir / Path(file_name)
+                new_fp = source_file_dir / Path(file_name).name
+                current_fp.rename(new_fp)
+                shutil.rmtree(source_file_dir / "blif")
+
+                fix_blif_constant_expr(new_fp)
+                fix_blif_duplicate_model_definition(new_fp)
+
+                source_file_dir = design_dir / "sources"
+                source_file_dir.mkdir(parents=True, exist_ok=True)
+
+                yosys_script = f"""
+                read_blif -sop {source_file_dir / new_fp}
+                techmap t:$sop
+                write_verilog {source_file_dir / base_name}.v
+                """
+
+                temp_dir_yosys = TemporaryDirectory()
+                temp_dir_fp_yosys = Path(temp_dir_yosys.name)
+                temp_script_fp = temp_dir_fp_yosys / "script.ys"
+                temp_script_fp.write_text(yosys_script)
+
+                p = subprocess.run(
+                    [yosys_bin, "-s", temp_script_fp],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+
+                if p.returncode != 0:
+                    raise RuntimeError(
+                        f"Yosys failed to convert {new_fp} to Verilog:\n"
+                        f"{p.stdout}\n"
+                        f"{p.stderr}\n",
+                    )
+
+
+class I99TDatasetRetriever(DatasetRetriever):
+    dataset_name: str = "i99t"
+    dataset_type: str = "academic"
+
+    I99T_URL: str = "https://github.com/cad-polito-it/I99T/archive/refs/tags/v2.tar.gz"
+
+    BLACKLIST: ClassVar[list[str]] = [
+        "b08",
+        "b30",
+    ]
+
+    def get_dataset(self, overwrite: bool = False) -> None:
+        # check for yosys
+        yosys_bin = auto_find_bin("yosys")
+        if yosys_bin is None:
+            raise RuntimeError(
+                "Yosys is needed to preprocess the I99T dataset. "
+                "Yosys was not found in PATH or in the "
+                "YOSYS_PATH environment variable.",
+            )
+        p = subprocess.run(
+            [yosys_bin, "-m", "ghdl", "-p", ""],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if p.returncode != 0:
+            raise RuntimeError(
+                "Yosys is missing the ghdl module. "
+                "Please install ghdl to be used with yosys.",
+            )
+
+        listing = get_listing_from_github(
+            self.design_dataset.gh_api,
+            "cad-polito-it",
+            "I99T",
+            "i99t",
+        )
+        paths = [
+            content_file.path for content_file in listing if content_file.type == "dir"
+        ]
+        paths = sorted(paths)
+        for path in paths:
+            base_name = path.split("/")[-1]
+            if base_name in self.BLACKLIST:
+                continue
+            design_name = f"i99t_{base_name}"
+
+            vhd_name = f"{base_name}.vhd"
+            vhdl_name = f"{base_name}.vhdl"
+
+            design_dir = self.design_dataset.designs_dir / design_name
+            if design_dir.exists():
+                shutil.rmtree(design_dir)
+            design_dir.mkdir(parents=True, exist_ok=True)
+
+            metadata = {}
+            metadata["design_name"] = design_name
+            metadata["dataset_name"] = self.dataset_name
+            metadata["dataset_type"] = self.dataset_type
+            metadata_fp = design_dir / "design.json"
+            metadata_fp.write_text(json.dumps(metadata, indent=4))
+
+            source_vhdl_file_dir = design_dir / "sources_vhdl"
+            source_vhdl_file_dir.mkdir(parents=True, exist_ok=True)
+
+            text = get_file_from_github(
+                self.design_dataset.gh_api,
+                "cad-polito-it",
+                "I99T",
+                f"{path}/{vhd_name}",
+            )
+            design_fp = source_vhdl_file_dir / vhdl_name
+            design_fp.write_text(text)
+
+            sources_file_dir = design_dir / "sources"
+            sources_file_dir.mkdir(parents=True, exist_ok=True)
+
+            yosys_script = f"""
+            ghdl --ieee=synopsys --std=08 {source_vhdl_file_dir / vhdl_name} -e {base_name}
+            write_verilog {sources_file_dir / base_name}.v
+            """
+
+            temp_dir_yosys = TemporaryDirectory()
+            temp_dir_fp_yosys = Path(temp_dir_yosys.name)
+            temp_script_fp = temp_dir_fp_yosys / "script.ys"
+            temp_script_fp.write_text(yosys_script)
+
+            p = subprocess.run(
+                [yosys_bin, "-m", "ghdl", "-s", temp_script_fp],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            if p.returncode != 0:
+                raise RuntimeError(
+                    f"Yosys failed to convert {vhdl_name} to Verilog:\n"
+                    f"{p.stdout}\n"
+                    f"{p.stderr}\n",
+                )
+
+
+class AddersCVUTDatasetRetriever(DatasetRetriever):
+    dataset_name: str = "adders_cvut"
+    dataset_type: str = "academic"
+
+    ADDERS_CVUT_URL: str = "https://ddd.fit.cvut.cz/www/prj/Benchmarks/Adders.7z"
+
+    def get_dataset(self, overwrite: bool = False) -> None:
+        # check for yosys
+        yosys_bin = auto_find_bin("yosys")
+        if yosys_bin is None:
+            raise RuntimeError(
+                "Yosys is needed to preprocess the Adders CVUT dataset. "
+                "Yosys was not found in PATH or in the "
+                "YOSYS_PATH environment variable.",
+            )
+
+        temp_dir = TemporaryDirectory()
+        temp_dir_fp = Path(temp_dir.name)
+        temp_file_fp = temp_dir_fp / "adders.7z"
+        with (
+            requests.get(self.ADDERS_CVUT_URL, stream=True, timeout=10) as r,
+            temp_file_fp.open("wb") as f,
+        ):
+            shutil.copyfileobj(r.raw, f)
+
+        with py7zr.SevenZipFile(temp_file_fp, "r") as archive:
+            files = [
+                p
+                for p in archive.getnames()
+                if p.endswith(".blif") and not p.endswith("_col.blif")
+            ]
+            print(files)
+            # ['01-adder.blif', '02-adder.blif', '03-adder.blif', '04-adder.blif', '05-adder.blif', '06-adder.blif', '07-adder.blif', '08-adder.blif', '09-adder.blif', '10-adder.blif', '11-adder.blif', '12-adder.blif', '13-adder.blif', '14-adder.blif', '15-adder.blif', '16-adder.blif']
+
+            for file_name in files:
+                base_name = file_name.split("/")[-1].replace(".blif", "")
+                design_name = f"adders_cvut_{base_name}"
+
+                design_dir = self.design_dataset.designs_dir / design_name
+                if design_dir.exists():
+                    shutil.rmtree(design_dir)
+                design_dir.mkdir(parents=True, exist_ok=True)
+
+                metadata = {}
+                metadata["design_name"] = design_name
+                metadata["dataset_name"] = self.dataset_name
+                metadata["dataset_type"] = self.dataset_type
+                metadata_fp = design_dir / "design.json"
+                metadata_fp.write_text(json.dumps(metadata, indent=4))
+
+                source_blif_file_dir = design_dir / "sources_blif"
+                source_blif_file_dir.mkdir(parents=True, exist_ok=True)
+                archive.extract(targets=[file_name], path=source_blif_file_dir)
+                archive.reset()
+
+                current_fp = source_blif_file_dir / Path(file_name)
+                new_fp = source_blif_file_dir / Path(file_name).name
+                current_fp.rename(new_fp)
+
+                # fix_blif_constant_expr(new_fp)
+                # fix_blif_duplicate_model_definition(new_fp)
+
+                source_file_dir = design_dir / "sources"
+                source_file_dir.mkdir(parents=True, exist_ok=True)
+
+                yosys_script = f"""
+                read_blif -sop {source_blif_file_dir / new_fp}
+                techmap t:$sop
+                write_verilog {source_file_dir / base_name}.v
+                """
+
+                temp_dir_yosys = TemporaryDirectory()
+                temp_dir_fp_yosys = Path(temp_dir_yosys.name)
+                temp_script_fp = temp_dir_fp_yosys / "script.ys"
+                temp_script_fp.write_text(yosys_script)
+
+                p = subprocess.run(
+                    [yosys_bin, "-s", temp_script_fp],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+
+                if p.returncode != 0:
+                    raise RuntimeError(
+                        f"Yosys failed to convert {new_fp} to Verilog:\n"
+                        f"{p.stdout}\n"
+                        f"{p.stderr}\n",
+                    )
