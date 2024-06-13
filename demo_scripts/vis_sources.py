@@ -2,6 +2,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+from dotenv import dotenv_values
 from sklearn.decomposition import PCA, TruncatedSVD
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.manifold import TSNE
@@ -12,8 +13,37 @@ current_script_dir = Path(__file__).parent
 
 figure_dir = current_script_dir / "figures"
 
-test_db_dir = current_script_dir / "test_dataset_v2"
-test_dataset = DesignDataset(test_db_dir)
+env_config = dotenv_values(current_script_dir / ".env")
+
+# load n_jobs
+if "N_JOBS" not in env_config:
+    raise ValueError("N_JOBS not defined in .env file")
+n_jobs_val = env_config["N_JOBS"]
+if not n_jobs_val:
+    raise ValueError("N_JOBS not defined in .env file")
+try:
+    n_jobs = int(n_jobs_val)
+except ValueError:
+    raise ValueError("N_JOBS must be an integer")
+if n_jobs < 1:
+    raise ValueError("N_JOBS must be greater than 0")
+
+# load dataset path
+if "DB_PATH" in env_config:
+    db_path_val = env_config["DB_PATH"]
+    if not db_path_val:
+        raise ValueError("DB_PATH not defined in .env file")
+    try:
+        db_path = Path(db_path_val)
+    except Exception as e:
+        raise ValueError(f"An error occurred while processing DB_PATH: {e!s}")
+
+
+test_dataset = DesignDataset(
+    db_path,
+    overwrite=False,
+)
+
 
 corpus_fps = []
 design_names = []

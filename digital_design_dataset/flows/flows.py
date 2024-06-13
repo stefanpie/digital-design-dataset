@@ -1,5 +1,7 @@
 import json
+import logging
 import shutil
+from abc import ABC, abstractmethod
 from typing import Any
 
 import networkx as nx
@@ -12,9 +14,11 @@ from digital_design_dataset.design_dataset import (
 )
 from digital_design_dataset.flows.design_hierarchy import extract_design_hierarchy
 from digital_design_dataset.flows.verilog_ast import verilog_ast
+from digital_design_dataset.flows.yosys_aig import yosys_aig
+from digital_design_dataset.logger import build_logger
 
 
-class Flow:
+class Flow(ABC):
     flow_name: str
     flow_type: str  # TODO: Change to be more like tags, like a list[str]
 
@@ -22,6 +26,14 @@ class Flow:
         self.design_dataset = design_dataset
 
     def build_flow(self, overwrite: bool = False) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def build_flow_single(
+        self,
+        design: dict[str, Any],
+        overwrite: bool = False,
+    ) -> None:
         raise NotImplementedError
 
 
@@ -82,6 +94,8 @@ class ModuleInfoFlow(Flow):
         design: dict[str, Any],
         overwrite: bool = False,
     ) -> None:
+        logger = build_logger("ModuleInfoFlow", logging.INFO)
+        logger.info(f"Building flow {self.flow_name} for {design['design_name']}")
         # count number of modules in a design
         design_dir = self.design_dataset.designs_dir / design["design_name"]
         sources_dir = design_dir / "sources"
@@ -227,7 +241,7 @@ class YosysAIGFlow(Flow):
 
         design_metadata_fp.write_text(json.dumps(design_metadata, indent=4))
 
-        aig_graph, json_data, stat_txt, stat_json = yosys_aig(
+        aig_graph, json_data, verilog_raw, stat_txt, stat_json = yosys_aig(
             sources_fps,
             yosys_bin=self.yosys_bin,
         )
@@ -237,6 +251,9 @@ class YosysAIGFlow(Flow):
 
         aig_yosys_json_fp = flow_dir / "aig_yosys.json"
         aig_yosys_json_fp.write_text(json.dumps(json_data, indent=4))
+
+        verilog_raw_fp = flow_dir / "aig_verilog.v"
+        verilog_raw_fp.write_text(verilog_raw)
 
         stat_txt_fp = flow_dir / "stat.txt"
         stat_txt_fp.write_text(stat_txt)

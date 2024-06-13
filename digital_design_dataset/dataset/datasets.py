@@ -1,14 +1,13 @@
 import base64
-import gzip
 import io
 import json
-import os
 import re
 import shutil
 import subprocess
-import tarfile
 import zipfile
+from collections import defaultdict
 from pathlib import Path
+from pprint import pp
 from tempfile import TemporaryDirectory
 from typing import ClassVar
 
@@ -105,6 +104,10 @@ class OpencoresDatasetRetriever(DatasetRetriever):
     dataset_name = "opencores"
     dataset_type = "opencores"
 
+    BLACKLIST = [
+        "6809_6309_compatible_core",
+    ]
+
     # https://github.com/stefanpie/hardware-design-dataset-opencores
 
     def get_dataset(self, overwrite: bool = False) -> None:
@@ -130,7 +133,11 @@ class OpencoresDatasetRetriever(DatasetRetriever):
                 designs.append(fn)
 
         for fn in designs:
-            design_name = fn.split("/")[1]
+            base_name = fn.split("/")[1]
+            if base_name in self.BLACKLIST:
+                continue
+            design_name = f"opencores__{base_name}"
+            # design_name = fn.split("/")[1]
             design_dir = self.design_dataset.designs_dir / design_name
             if design_dir.exists():
                 shutil.rmtree(design_dir)
@@ -150,7 +157,7 @@ class OpencoresDatasetRetriever(DatasetRetriever):
             source_file_dir.mkdir(parents=True, exist_ok=True)
 
             for file in z.namelist():
-                if file.startswith(f"designs/{design_name}/"):
+                if file.startswith(f"designs/{base_name}/"):
                     if file[-1] != "/":
                         file_name = file.split("/")[-1]
                         extension = file_name.split(".")[-1]
@@ -177,7 +184,7 @@ class HW2VecDatasetRetriever(DatasetRetriever):
             "assets/datasets.zip",
         )
 
-        r = requests.get(download_url)  # TODO: add timeout
+        r = requests.get(download_url, timeout=10)
         # if r.status_code != requests.status_codes.codes.ok:
         if r.status_code != 200:
             raise RuntimeError(
@@ -190,8 +197,10 @@ class HW2VecDatasetRetriever(DatasetRetriever):
                 designs.append(fn)
 
         for fn in designs:
-            design_name = fn.split("/")[-2]
-            if design_name in self.BLACKLIST:
+            base_name = fn.split("/")[-2]
+            design_name = f"hw2vec__{base_name.replace('-', '_')}"
+
+            if base_name in self.BLACKLIST:
                 continue
             design_dir = self.design_dataset.designs_dir / design_name
             if design_dir.exists():
@@ -267,8 +276,9 @@ class VTRDatasetRetriever(DatasetRetriever):
         )
 
         for file in file_list:
-            design_name = file["name"].replace(".v", "")
-            if design_name in self.BLACKLIST:
+            base_name = file["name"].replace(".v", "")
+            design_name = f"vtr__{base_name}"
+            if base_name in self.BLACKLIST:
                 continue
             design_dir = self.design_dataset.designs_dir / design_name
             if design_dir.exists():
@@ -322,7 +332,8 @@ class KoiosDatasetRetriever(DatasetRetriever):
         file_list = list(filter(lambda x: "_include.v" not in x["name"], file_list))
 
         for file in file_list:
-            design_name = file["name"].replace(".v", "")
+            base_name = file["name"].replace(".v", "")
+            design_name = f"koios__{base_name}"
             design_dir = self.design_dataset.designs_dir / design_name
             if design_dir.exists():
                 shutil.rmtree(design_dir)
@@ -377,7 +388,8 @@ class EPFLDatasetRetriever(DatasetRetriever):
                 })
 
         for file in file_list:
-            design_name = file["name"].replace(".v", "")
+            base_name = file["name"].replace(".v", "")
+            design_name = f"epfl__{base_name}"
             design_dir = self.design_dataset.designs_dir / design_name
             if design_dir.exists():
                 shutil.rmtree(design_dir)
@@ -415,9 +427,10 @@ class OPDBDatasetRetriever(DatasetRetriever):
         )
 
         for design in design_list.splitlines():
-            design_name = (
+            base_name = (
                 "_".join(design.split("/")[1:]).replace(".v", "").replace(".pickle", "")
             )
+            design_name = f"opdb__{base_name}"
             design_dir = self.design_dataset.designs_dir / design_name
             if design_dir.exists():
                 shutil.rmtree(design_dir)
@@ -438,7 +451,7 @@ class OPDBDatasetRetriever(DatasetRetriever):
                 "OPDB",
                 design,
             )
-            Path(source_file_dir / (design_name + ".v")).write_text(text)
+            Path(source_file_dir / (base_name + ".v")).write_text(text)
 
 
 class ISCAS85DatasetRetriever(DatasetRetriever):
@@ -466,7 +479,7 @@ class ISCAS85DatasetRetriever(DatasetRetriever):
             for file_name in isca85_verilog_files:
                 case_name = file_name.split("/")[-1].replace(".v", "")
                 case_name = case_name.upper()
-                design_name = f"iscas85_{case_name}"
+                design_name = f"iscas85__{case_name}"
 
                 design_dir = self.design_dataset.designs_dir / design_name
                 if design_dir.exists():
@@ -525,7 +538,7 @@ class ISCAS89DatasetRetriever(DatasetRetriever):
             for file_name in isca85_verilog_files:
                 case_name = file_name.split("/")[-1].replace(".v", "")
                 case_name = case_name.upper()
-                design_name = f"iscas85_{case_name}"
+                design_name = f"iscas89__{case_name}"
 
                 design_dir = self.design_dataset.designs_dir / design_name
                 if design_dir.exists():
@@ -575,7 +588,7 @@ class LGSynth89DatasetRetriever(DatasetRetriever):
 
             for file_name in verilog_files:
                 case_name = file_name.split("/")[-1].replace("_orig.v", "")
-                design_name = f"lgsynth89_{case_name}"
+                design_name = f"lgsynth89__{case_name}"
 
                 design_dir = self.design_dataset.designs_dir / design_name
                 if design_dir.exists():
@@ -621,8 +634,10 @@ class LGSynth91DatasetRetriever(DatasetRetriever):
             verilog_files = [n for n in archive.getnames() if filter_pattern.match(n)]
 
             for file_name in verilog_files:
-                case_name = file_name.split("/")[-1].replace("_orig.v", "")
-                design_name = f"lgsynth91_{case_name}"
+                case_name = (
+                    file_name.split("/")[-1].replace("_orig.v", "").replace(".", "_")
+                )
+                design_name = f"lgsynth91__{case_name}"
 
                 design_dir = self.design_dataset.designs_dir / design_name
                 if design_dir.exists():
@@ -699,7 +714,7 @@ def fix_blif_duplicate_model_definition(fp: Path) -> None:
     seen_models = set()
     for model_text, model_name in model_data:
         if model_name in seen_models:
-            t = t.replace(model_text, "\n\n")
+            t = t.replace(model_text, "\n\n", 1)
         else:
             seen_models.add(model_name)
 
@@ -931,12 +946,12 @@ class AddersCVUTDatasetRetriever(DatasetRetriever):
                 for p in archive.getnames()
                 if p.endswith(".blif") and not p.endswith("_col.blif")
             ]
-            print(files)
-            # ['01-adder.blif', '02-adder.blif', '03-adder.blif', '04-adder.blif', '05-adder.blif', '06-adder.blif', '07-adder.blif', '08-adder.blif', '09-adder.blif', '10-adder.blif', '11-adder.blif', '12-adder.blif', '13-adder.blif', '14-adder.blif', '15-adder.blif', '16-adder.blif']
 
             for file_name in files:
-                base_name = file_name.split("/")[-1].replace(".blif", "")
-                design_name = f"adders_cvut_{base_name}"
+                base_name = (
+                    file_name.split("/")[-1].replace(".blif", "").replace("-", "_")
+                )
+                design_name = f"adders_cvut__{base_name}"
 
                 design_dir = self.design_dataset.designs_dir / design_name
                 if design_dir.exists():
@@ -989,3 +1004,256 @@ class AddersCVUTDatasetRetriever(DatasetRetriever):
                         f"{p.stdout}\n"
                         f"{p.stderr}\n",
                     )
+
+
+RE_CELL_ARRAY_INSTANCE = re.compile(r"[\w\d]+ +(?:#\(.*?\) +)*[\w\d]+\[\d+:\d+\]")
+
+
+def unroll_cell_array(inst_str: str) -> list[str]:
+    inst_str = inst_str.replace("](", "] (")
+    parts = inst_str.split(" ")
+
+    # get the cell name
+    cell_name = parts.pop(0)
+    # check if there are any parameters
+    cell_params = None
+    if "#" in inst_str:
+        cell_params = parts.pop(0)
+
+    # get the instance name and array size
+    inst_name_str = parts.pop(0)
+    inst_name, inst_size = inst_name_str.split("[")
+    inst_size = inst_size[:-1]
+    inst_range = [int(x) for x in inst_size.split(":")]
+
+    port_data_all = []
+    # get the port list
+    port_list = parts.pop(0)
+    port_list = port_list.replace("(", "").replace(")", "").replace(";", " ")
+    port_list = port_list.split(",")
+    port_list = [x.strip() for x in port_list]
+    for port in port_list:
+        port_name, port_range = port.split("[")
+        port_range = port_range[:-1]
+        port_range = [int(x) for x in port_range.split(":")]
+        port_data_all.append({
+            "name": port_name,
+            "range": port_range,
+        })
+
+    range_size_inst = abs(inst_range[0] - inst_range[1]) + 1
+    for port in port_data_all:
+        range_size_port = abs(port["range"][0] - port["range"][1]) + 1
+        if range_size_port != range_size_inst:
+            raise ValueError("Port and instance range sizes do not match")
+
+    inst_dir = 1 if inst_range[0] < inst_range[1] else -1
+    inst_vals = list(range(inst_range[0], inst_range[1] + inst_dir, inst_dir))
+    port_vals = []
+    for port in port_data_all:
+        port_dir = 1 if port["range"][0] < port["range"][1] else -1
+        port_generator = list(
+            range(port["range"][0], port["range"][1] + port_dir, port_dir),
+        )
+        port_vals.append(port_generator)
+
+    new_cell_lines = []
+    for idx in range(range_size_inst):
+        line = ""
+        line += f"{cell_name} "
+        if cell_params is not None:
+            line += f"{cell_params} "
+        line += f"{inst_name}__{inst_vals[idx]} "
+        line += "("
+        for port_idx, port in enumerate(port_data_all):
+            line += f"{port['name']}[{port_vals[port_idx][idx]}]"
+            if port_idx < len(port_data_all) - 1:
+                line += ", "
+        line += ");"
+        new_cell_lines.append(line)
+
+    return new_cell_lines
+
+
+def unroll_cell_array_instances(fp: Path) -> None:
+    t = fp.read_text()
+    lines = t.splitlines()
+    new_lines = []
+    for line in lines:
+        if RE_CELL_ARRAY_INSTANCE.match(line):
+            unrolled = unroll_cell_array(line)
+            new_lines.extend(unrolled)
+        else:
+            new_lines.append(line)
+    t = "\n".join(new_lines)
+    fp.write_text(t)
+
+
+class VerilogAddersMongrelgemDatasetRetriever(DatasetRetriever):
+    dataset_name: str = "verilog_adders_mongrelgem"
+    dataset_type: str = "open_source"
+
+    DATA_URL: str = "https://github.com/mongrelgem/Verilog-Adders"
+
+    DESIGN_FILES: ClassVar[list[str]] = [
+        "Carry Lookahead Adder/CarryLookaheadAdder.v",
+        "Carry Ripple Adder/CarryRippleAdder.v",
+        "Carry Select Adder/CarrySelectAdder.v",
+        "Carry Skip Adder/CarrySkipAdder.v",
+        "Hybrid Adder/HybridAdder.v",
+        "Kogge-Stone Adder/KoggeStoneAdder.v",
+    ]
+
+    def get_dataset(self, overwrite: bool = False) -> None:
+        for design_fp in self.DESIGN_FILES:
+            base_name = design_fp.split("/")[-1].replace(".v", "")
+            design_name = f"verilog_adders_mongrelgem__{base_name}"
+            design_dir = self.design_dataset.designs_dir / design_name
+            if design_dir.exists():
+                shutil.rmtree(design_dir)
+            design_dir.mkdir(parents=True, exist_ok=True)
+
+            metadata = {}
+            metadata["design_name"] = design_name
+            metadata["dataset_name"] = self.dataset_name
+            metadata["dataset_type"] = self.dataset_type
+            metadata_fp = design_dir / "design.json"
+            metadata_fp.write_text(json.dumps(metadata, indent=4))
+
+            source_file_dir = design_dir / "sources"
+            source_file_dir.mkdir(parents=True, exist_ok=True)
+
+            print(f"Downloading {design_fp}")
+            text = get_file_from_github(
+                self.design_dataset.gh_api,
+                "mongrelgem",
+                "Verilog-Adders",
+                design_fp,
+            )
+            design_fp_local = source_file_dir / design_fp.split("/")[-1]
+            design_fp_local.write_text(text)
+
+            unroll_cell_array_instances(design_fp_local)
+            # exit()
+
+
+class Texas97DatasetRetriever(DatasetRetriever):
+    dataset_name: str = "texas97"
+    dataset_type: str = "academic"
+
+    DATA_URL: str = "https://ptolemy.berkeley.edu/projects/embedded/research/vis/texas97-benchmarks.tar.gz"
+
+    # TODO: Implement this, requires manual extraction for each design, not too hard
+    def get_dataset(self, overwrite: bool = False) -> None:
+        raise NotImplementedError
+
+
+class MCNC20DatasetRetriever(DatasetRetriever):
+    dataset_name: str = "mcnc20"
+    dataset_type: str = "academic"
+
+    DATA_URL: str = "https://ddd.fit.cvut.cz/www/prj/Benchmarks/MCNC.7z"
+
+    # TODO: Implement this, requires blif conversion
+    def get_dataset(self, overwrite: bool = False) -> None:
+        # check for yosys
+        yosys_bin = auto_find_bin("yosys")
+        if yosys_bin is None:
+            raise RuntimeError(
+                f"Yosys is needed to preprocess the {self.dataset_name} dataset. "
+                "Yosys was not found in PATH or in the "
+                "YOSYS_PATH environment variable.",
+            )
+
+        raise NotImplementedError
+
+
+class DeepBenchVerilogDatasetRetriever(DatasetRetriever):
+    dataset_name: str = "deepbenchverilog"
+    dataset_type: str = "academic"
+
+    DESIGN_PATHS: ClassVar[list[str]] = [
+        # inference
+        # inference/Conv
+        # "verilog/inference/Conv/conv_b1_in_112_112_3_f_7_7_16_s_2_p_same",
+        "verilog/inference/Conv/conv_b1_in_112_112_3_f_7_7_16_s_2_p_same/ap_fixed_16_8",
+        "verilog/inference/Conv/conv_b1_in_112_112_3_f_7_7_16_s_2_p_same/ap_fixed_8_4",
+        # "verilog/inference/Conv/conv_b1_in_56_56_16_f_1_1_64_s_2_p_valid",
+        "verilog/inference/Conv/conv_b1_in_56_56_16_f_1_1_64_s_2_p_valid/ap_fixed_16_8",
+        "verilog/inference/Conv/conv_b1_in_56_56_16_f_1_1_64_s_2_p_valid/ap_fixed_8_4",
+        # "verilog/inference/Conv/conv_b2_in_7_7_32_f_1_1_128_s_1_p_valid",
+        "verilog/inference/Conv/conv_b2_in_7_7_32_f_1_1_128_s_1_p_valid/ap_fixed_16_8",
+        "verilog/inference/Conv/conv_b2_in_7_7_32_f_1_1_128_s_1_p_valid/ap_fixed_8_4",
+        # inference/GEMM
+        "verilog/inference/GEMM/GEMM_3072_3000_1024_N_N_Core_256_200_256",
+        "verilog/inference/GEMM/GEMM_35_700_2048_N_N_Core_35_175_256",
+        "verilog/inference/GEMM/GEMM_5124_700_2048_N_N_Core_244_175_256",
+        "verilog/inference/GEMM/GEMM_512_6000_2816_N_N_Core_256_200_256",
+        # inference/RNN
+        "verilog/inference/RNN/LSTM_256_4_Core_256_4_256_Reuse_4_1_2",
+        "verilog/inference/RNN/LSTM_1536_4_Core_256_4_256_Reuse_24_1_12",
+        "verilog/inference/RNN/GRU_2560_2_Core_256_2_256_Reuse_30_1_20",
+        "verilog/inference/RNN/GRU_2816_1_Core_256_1_256_Reuse_33_1_22",
+        # training
+        # training/Conv
+        "verilog/training/Conv/conv_b16_in_28_28_16_f_5_5_8_s_1_p_same",
+        "verilog/training/Conv/conv_b16_in_56_56_3_f_3_3_16_s_1_p_same",
+        "verilog/training/Conv/conv_b16_in_7_7_16_f_3_3_16_s_1_p_same",
+        "verilog/training/Conv/conv_b8_in_28_28_16_f_3_3_16_s_1_p_same",
+        # training/GEMM
+        "verilog/training/GEMM/GEMM_1760_128_1760_N_N_Core_220_128_220",
+        "verilog/training/GEMM/GEMM_1760_128_1760_N_N_Core_352_128_352_extra",
+        "verilog/training/GEMM/GEMM_2560_64_2560_N_N_Core_256_64_256",
+        "verilog/training/GEMM/GEMM_3072_128_1024_T_N_Core_256_128_256",
+        "verilog/training/GEMM/GEMM_5124_9124_2560_T_N_Core_244_256_256",
+        "verilog/training/GEMM/GEMM_7860_648_2560_N_N_Core_131_64_256",
+        # training/RNN
+        "verilog/training/RNN/LSTM_1024_128_Core_256_128_256_Reuse_16_1_8",
+        "verilog/training/RNN/LSTM_2816_32_Core_256_32_256_Reuse_33_1_22",
+        "verilog/training/RNN/Vanilla_1760_16_Core_220_16_220_Reuse_8_1_12",
+        "verilog/training/RNN/Vanilla_2560_32_Core_256_32_256_Reuse_10_1_20",
+    ]
+
+    def get_dataset(self, overwrite: bool = False) -> None:
+        for gh_path in self.DESIGN_PATHS:
+            if "inference/Conv" in gh_path:
+                base_name = gh_path.split("/")[-2:]
+                base_name = "_".join(base_name)
+            else:
+                base_name = gh_path.split("/")[-1]
+            design_name = f"deepbenchverilog__{base_name}"
+            design_dir = self.design_dataset.designs_dir / design_name
+            if design_dir.exists():
+                shutil.rmtree(design_dir)
+            design_dir.mkdir(parents=True, exist_ok=True)
+
+            metadata = {}
+            metadata["design_name"] = design_name
+            metadata["dataset_name"] = self.dataset_name
+            metadata["dataset_type"] = self.dataset_type
+            metadata_fp = design_dir / "design.json"
+            metadata_fp.write_text(json.dumps(metadata, indent=4))
+
+            source_file_dir = design_dir / "sources"
+            source_file_dir.mkdir(parents=True, exist_ok=True)
+
+            print(f"Downloading {gh_path}")
+
+            # each is a dir with verilog files in it
+            listing = get_listing_from_github(
+                self.design_dataset.gh_api,
+                "raminrasoulinezhad",
+                "DeepBenchVerilog",
+                gh_path,
+            )
+            for file in listing:
+                if file.type == "dir":
+                    raise ValueError("Expected a file, got a directory")
+                text = get_file_from_github(
+                    self.design_dataset.gh_api,
+                    "raminrasoulinezhad",
+                    "DeepBenchVerilog",
+                    file.path,
+                )
+                design_fp = source_file_dir / file.name
+                design_fp.write_text(text)

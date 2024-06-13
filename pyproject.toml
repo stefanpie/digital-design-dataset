@@ -30,9 +30,10 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 packages = ["digital_design_dataset"]
 
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = ["-s"]
+addopts = ["-s", "-v", "--cov=digital_design_dataset", "--cov-report=html", "--cov-append"] 
 log_cli = true
 
 
@@ -58,5 +59,10 @@ ignore = [
     "FBT002",
     "RET504",
     "E266",
-    "PERF401"
+    "PERF401",
+    "S404",
+    "S603",
+    "S607",
+    "PLR0914",
+    "G004"
 ]

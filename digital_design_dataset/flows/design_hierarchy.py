@@ -1,9 +1,14 @@
+import logging
 import subprocess
 import tempfile
 from pathlib import Path
 
+from digital_design_dataset.logger import build_logger
+
 
 def extract_design_hierarchy(design_files: list[Path]) -> list[str]:
+    logger = build_logger("extract_design_hierarchy", logging.INFO)
+
     modules = []
 
     # call yosys to read the design files and extract the design hierarchy
@@ -34,6 +39,13 @@ def extract_design_hierarchy(design_files: list[Path]) -> list[str]:
         if p.returncode != 0:
             std_out = p.stdout.decode("utf-8")
             std_err = p.stderr.decode("utf-8")
+            logger.error(
+                f"Yosys call to extract design hierarchy "
+                f" failed with code {p.returncode}.\n"
+                f"design_files: {design_files}"
+                f"stdout:\n{std_out}\n"
+                f"stderr:\n{std_err}",
+            )
             raise RuntimeError(
                 f"yosys exited with code {p.returncode}.\n"
                 f"stdout:\n{std_out}\n"

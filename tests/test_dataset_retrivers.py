@@ -1,9 +1,22 @@
+import logging
+import multiprocessing
+import operator
 from pathlib import Path
 
 from dotenv import dotenv_values
+from joblib import Parallel, delayed
+
+try:
+    from pytest_cov.embed import cleanup_on_sigterm
+except ImportError:
+    pass
+else:
+    cleanup_on_sigterm()
 
 from digital_design_dataset.dataset.datasets import (
     AddersCVUTDatasetRetriever,
+    DatasetRetriever,
+    DeepBenchVerilogDatasetRetriever,
     EPFLDatasetRetriever,
     HW2VecDatasetRetriever,
     I99TDatasetRetriever,
@@ -15,11 +28,14 @@ from digital_design_dataset.dataset.datasets import (
     LGSynth91DatasetRetriever,
     OPDBDatasetRetriever,
     OpencoresDatasetRetriever,
+    VerilogAddersMongrelgemDatasetRetriever,
     VTRDatasetRetriever,
 )
 from digital_design_dataset.design_dataset import (
     DesignDataset,
 )
+from digital_design_dataset.flows.flows import Flow, ModuleInfoFlow, YosysAIGFlow
+from digital_design_dataset.logger import build_logger
 
 DIR_CURRENT = Path(__file__).parent
 
@@ -40,6 +56,19 @@ if not test_path_val:
     raise ValueError("TEST_DIR not defined in .env file")
 test_path = Path(test_path_val)
 
+# load n_jobs
+if "N_JOBS" not in env_config:
+    raise ValueError("N_JOBS not defined in .env file")
+n_jobs_val = env_config["N_JOBS"]
+if not n_jobs_val:
+    raise ValueError("N_JOBS not defined in .env file")
+try:
+    n_jobs = int(n_jobs_val)
+except ValueError:
+    raise ValueError("N_JOBS must be an integer")
+if n_jobs < 1:
+    raise ValueError("N_JOBS must be greater than 0")
+
 
 # load design dataset
 db_path = test_path / "db"
@@ -49,6 +78,8 @@ d = DesignDataset(
     gh_token=gh_token,
 )
 
+logger = build_logger("test_dataset_retrievers", logging.DEBUG)
+
 
 def remove_existing_dataset_designs(d: DesignDataset, retriever_name: str) -> None:
     designs = d.get_design_metadata_by_dataset_name(retriever_name)
@@ -56,80 +87,197 @@ def remove_existing_dataset_designs(d: DesignDataset, retriever_name: str) -> No
         d.delete_design(design["design_name"])
 
 
-def test_epfl_dataset_retriever() -> None:
-    r = EPFLDatasetRetriever(d)
+def auto_retriever(
+    d: DesignDataset,
+    retriever_class: type[DatasetRetriever],
+) -> None:
+    r = retriever_class(d)
     remove_existing_dataset_designs(d, r.__class__.dataset_name)
     r.get_dataset()
 
 
-def test_hw2vec_dataset_retriever() -> None:
-    r = HW2VecDatasetRetriever(d)
-    remove_existing_dataset_designs(d, r.__class__.dataset_name)
-    r.get_dataset()
+def run_single(
+    design: dict,
+    f_module: ModuleInfoFlow,
+    f_synth: YosysAIGFlow,
+    logger: logging.Logger,
+) -> None:
+    logger.info(f"{design['design_name']}: Running {f_module.__class__.__name__}")
+    f_module.build_flow_single(design)
+
+    logger.info(f"{design['design_name']}: Running {f_synth.__class__.__name__}")
+    f_synth.build_flow_single(design)
+
+    logger.info(f"{design['design_name']}: Done running flows")
 
 
-def test_iscas85_dataset_retriever() -> None:
-    r = ISCAS85DatasetRetriever(d)
-    remove_existing_dataset_designs(d, r.__class__.dataset_name)
-    r.get_dataset()
+def auto_validate(
+    d: DesignDataset,
+    retriever_class: type[DatasetRetriever],
+    n_jobs: int = 1,
+) -> None:
+    if n_jobs < 1:
+        raise ValueError("n_jobs must be greater than 0")
+
+    r = retriever_class(d)
+    dataset_name = r.__class__.dataset_name
+    designs = d.get_design_metadata_by_dataset_name(dataset_name)
+    designs = sorted(designs, key=operator.itemgetter("design_name"))
+    if not designs:
+        r.get_dataset()
+        designs = d.get_design_metadata_by_dataset_name(dataset_name)
+
+    f_module = ModuleInfoFlow(d)
+    f_synth = YosysAIGFlow(d)
+
+    if n_jobs == 1:
+        for design in designs:
+            run_single(design, f_module, f_synth, logger)
+    else:
+        pool = multiprocessing.Pool(n_jobs)
+        pool.starmap(
+            run_single,
+            [(design, f_module, f_synth, logger) for design in designs],
+            chunksize=1,
+        )
+        pool.close()
+        pool.join()
 
 
-def test_iscas89_dataset_retriever() -> None:
-    r = ISCAS89DatasetRetriever(d)
-    remove_existing_dataset_designs(d, r.__class__.dataset_name)
-    r.get_dataset()
+### EPFLDatasetRetriever ###
+def test_epfl_retriever() -> None:
+    auto_retriever(d, EPFLDatasetRetriever)
 
 
-def test_koios_dataset_retriever() -> None:
-    r = KoiosDatasetRetriever(d)
-    remove_existing_dataset_designs(d, r.__class__.dataset_name)
-    r.get_dataset()
+def test_epfl_validate() -> None:
+    auto_validate(d, EPFLDatasetRetriever, n_jobs=n_jobs)
 
 
-def test_lgsynth89_dataset_retriever() -> None:
-    r = LGSynth89DatasetRetriever(d)
-    remove_existing_dataset_designs(d, r.__class__.dataset_name)
-    r.get_dataset()
+### HW2VecDatasetRetriever ###
+def test_hw2vec_retriever() -> None:
+    auto_retriever(d, HW2VecDatasetRetriever)
 
 
-def test_lgsynth91_dataset_retriever() -> None:
-    r = LGSynth91DatasetRetriever(d)
-    remove_existing_dataset_designs(d, r.__class__.dataset_name)
-    r.get_dataset()
+def test_hw2vec_validate() -> None:
+    auto_validate(d, HW2VecDatasetRetriever, n_jobs=n_jobs)
 
 
-def test_opdb_dataset_retriever() -> None:
-    r = OPDBDatasetRetriever(d)
-    remove_existing_dataset_designs(d, r.__class__.dataset_name)
-    r.get_dataset()
+### ISCAS85DatasetRetriever ###
+def test_iscas85_retriever() -> None:
+    auto_retriever(d, ISCAS85DatasetRetriever)
 
 
-def test_opencores_dataset_retriever() -> None:
-    r = OpencoresDatasetRetriever(d)
-    remove_existing_dataset_designs(d, r.__class__.dataset_name)
-    r.get_dataset()
+def test_iscas85_validate() -> None:
+    auto_validate(d, ISCAS85DatasetRetriever, n_jobs=n_jobs)
 
 
-def test_vtr_dataset_retriever() -> None:
-    r = VTRDatasetRetriever(d)
-    remove_existing_dataset_designs(d, r.__class__.dataset_name)
-    r.get_dataset()
+### ISCAS89DatasetRetriever ###
+def test_iscas89_retriever() -> None:
+    auto_retriever(d, ISCAS89DatasetRetriever)
 
 
-def test_iwls93_dataset_retriever() -> None:
-    r = IWLS93DatasetRetriever(d)
-    remove_existing_dataset_designs(d, r.__class__.dataset_name)
-    r.get_dataset()
+def test_iscas89_validate() -> None:
+    auto_validate(d, ISCAS89DatasetRetriever)
 
 
-# I99TDatasetRetriever
-def test_i99t_dataset_retriever() -> None:
-    r = I99TDatasetRetriever(d)
-    remove_existing_dataset_designs(d, r.__class__.dataset_name)
-    r.get_dataset()
+### KoiosDatasetRetriever ###
+def test_koios_retriever() -> None:
+    auto_retriever(d, KoiosDatasetRetriever)
 
 
-def test_adders_cvut_dataset_retriever() -> None:
-    r = AddersCVUTDatasetRetriever(d)
-    remove_existing_dataset_designs(d, r.__class__.dataset_name)
-    r.get_dataset()
+def test_koios_validate() -> None:
+    auto_validate(d, KoiosDatasetRetriever, n_jobs=n_jobs)
+
+
+### LGSynth89DatasetRetriever ###
+def test_lgsynth89_retriever() -> None:
+    auto_retriever(d, LGSynth89DatasetRetriever)
+
+
+def test_lgsynth89_validate() -> None:
+    auto_validate(d, LGSynth89DatasetRetriever, n_jobs=n_jobs)
+
+
+### LGSynth91DatasetRetriever ###
+def test_lgsynth91_retriever() -> None:
+    auto_retriever(d, LGSynth91DatasetRetriever)
+
+
+def test_lgsynth91_validate() -> None:
+    auto_validate(d, LGSynth91DatasetRetriever)
+
+
+### OPDBDatasetRetriever ###
+def test_opdb_retriever() -> None:
+    auto_retriever(d, OPDBDatasetRetriever)
+
+
+def test_opdb_validate() -> None:
+    # TODO: run in parallel
+    # TODO: not tested yet
+    auto_validate(d, OPDBDatasetRetriever)
+
+
+### OpencoresDatasetRetriever ###
+def test_opencores_retriever() -> None:
+    auto_retriever(d, OpencoresDatasetRetriever)
+
+
+def test_opencores_validate() -> None:
+    # TODO: run in parallel
+    # TODO: not tested yet
+    auto_validate(d, OpencoresDatasetRetriever)
+
+
+### VTRDatasetRetriever ###
+def test_vtr_retriever() -> None:
+    auto_retriever(d, VTRDatasetRetriever)
+
+
+def test_vtr_validate() -> None:
+    auto_validate(d, VTRDatasetRetriever, n_jobs=n_jobs)
+
+
+### IWLS93DatasetRetriever ###
+def test_iwls93_retriever() -> None:
+    auto_retriever(d, IWLS93DatasetRetriever)
+
+
+def test_iwls93_validate() -> None:
+    auto_validate(d, IWLS93DatasetRetriever)
+
+
+### I99TDatasetRetriever ###
+def test_i99t_retriever() -> None:
+    auto_retriever(d, I99TDatasetRetriever)
+
+
+def test_i99t_validate() -> None:
+    auto_validate(d, I99TDatasetRetriever)
+
+
+### AddersCVUTDatasetRetriever ###
+def test_adderscvut_retriever() -> None:
+    auto_retriever(d, AddersCVUTDatasetRetriever)
+
+
+def test_adderscvut_validate() -> None:
+    auto_validate(d, AddersCVUTDatasetRetriever)
+
+
+### VerilogAddersMongrelgemDatasetRetriever ###
+def test_verilog_adders_mongrelgem_retriever() -> None:
+    auto_retriever(d, VerilogAddersMongrelgemDatasetRetriever)
+
+
+def test_verilog_adders_mongrelgem_validate() -> None:
+    auto_validate(d, VerilogAddersMongrelgemDatasetRetriever)
+
+
+### DeepBenchVerilogDatasetRetriever ###
+def test_deepbenchverilog_retriever() -> None:
+    auto_retriever(d, DeepBenchVerilogDatasetRetriever)
+
+
+def test_deepbenchverilog_validate() -> None:
+    auto_validate(d, DeepBenchVerilogDatasetRetriever, n_jobs=n_jobs)

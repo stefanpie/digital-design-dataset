@@ -1,18 +1,67 @@
 import hashlib
+import multiprocessing
 import re
 from pathlib import Path
 
 import pandas as pd
 import tqdm
+from dotenv import dotenv_values
 
 from digital_design_dataset.design_dataset import DesignDataset
+from digital_design_dataset.flows.flows import ModuleInfoFlow
+from digital_design_dataset.logger import build_logger
+
+logger = build_logger("analyze_hashing")
 
 current_script_dir = Path(__file__).parent
 
 output_dir = current_script_dir / "output"
+env_config = dotenv_values(current_script_dir / ".env")
 
-test_db_dir = current_script_dir / "test_dataset_v2"
-test_dataset = DesignDataset(test_db_dir)
+# load n_jobs
+if "N_JOBS" not in env_config:
+    raise ValueError("N_JOBS not defined in .env file")
+n_jobs_val = env_config["N_JOBS"]
+if not n_jobs_val:
+    raise ValueError("N_JOBS not defined in .env file")
+try:
+    n_jobs = int(n_jobs_val)
+except ValueError:
+    raise ValueError("N_JOBS must be an integer")
+if n_jobs < 1:
+    raise ValueError("N_JOBS must be greater than 0")
+
+# load dataset path
+if "DB_PATH" in env_config:
+    db_path_val = env_config["DB_PATH"]
+    if not db_path_val:
+        raise ValueError("DB_PATH not defined in .env file")
+    try:
+        db_path = Path(db_path_val)
+    except Exception as e:
+        raise ValueError(f"An error occurred while processing DB_PATH: {e!s}")
+
+
+test_dataset = DesignDataset(
+    db_path,
+    overwrite=False,
+)
+
+# run the module_info flow on all designs
+f_module = ModuleInfoFlow(test_dataset)
+
+
+def run_single(design: dict) -> None:
+    logger.info(f"{design['design_name']}: Running {f_module.__class__.__name__}")
+    f_module.build_flow_single(design)
+
+
+all_designs = test_dataset.index
+pool = multiprocessing.Pool(n_jobs)
+pool.map(run_single, all_designs, chunksize=1)
+pool.close()
+pool.join()
+
 
 corpus_fps = []
 design_names = []

@@ -4,3 +4,6 @@
 **/.ipynb_checkpoints/
 
 .env
+
+.coverage
+htmlcov/
