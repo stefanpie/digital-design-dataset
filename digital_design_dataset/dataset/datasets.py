@@ -104,7 +104,7 @@ class OpencoresDatasetRetriever(DatasetRetriever):
     dataset_name = "opencores"
     dataset_type = "opencores"
 
-    BLACKLIST = [
+    BLACKLIST: ClassVar = [
         "6809_6309_compatible_core",
     ]
 
@@ -118,7 +118,10 @@ class OpencoresDatasetRetriever(DatasetRetriever):
             "designs.zip",
         )
 
-        r = requests.get(download_url)  # TODO: add timeout
+        r = requests.get(
+            download_url,
+            timeout=30,
+        )  # TODO: add a way for user to specify timeout
         if r.status_code != 200:
             raise RuntimeError(
                 f"Failed to make request: {r.status_code}\n{r.text}\n{r.headers}",
@@ -137,7 +140,6 @@ class OpencoresDatasetRetriever(DatasetRetriever):
             if base_name in self.BLACKLIST:
                 continue
             design_name = f"opencores__{base_name}"
-            # design_name = fn.split("/")[1]
             design_dir = self.design_dataset.designs_dir / design_name
             if design_dir.exists():
                 shutil.rmtree(design_dir)
@@ -184,7 +186,7 @@ class HW2VecDatasetRetriever(DatasetRetriever):
             "assets/datasets.zip",
         )
 
-        r = requests.get(download_url, timeout=10)
+        r = requests.get(download_url, timeout=30)
         # if r.status_code != requests.status_codes.codes.ok:
         if r.status_code != 200:
             raise RuntimeError(
@@ -235,10 +237,10 @@ class VTRDatasetRetriever(DatasetRetriever):
         "mcml",
     )
     # these designs cause issues with yosys auto-expanding memories
-    # leading to long runtimes and out-of-memory issues
+    # leading to long runtime and out-of-memory issues
     # TODO: find workaround in the future
 
-    def get_dataset(self, overwrite: bool = True):
+    def get_dataset(self, overwrite: bool = True) -> None:
         listing = get_listing_from_github(
             self.design_dataset.gh_api,
             "verilog-to-routing",
