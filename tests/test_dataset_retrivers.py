@@ -28,6 +28,7 @@ from digital_design_dataset.data_sources.data_retrievers import (
     KoiosDatasetRetriever,
     LGSynth89DatasetRetriever,
     LGSynth91DatasetRetriever,
+    MCNC20DatasetRetriever,
     OPDBDatasetRetriever,
     OpencoresDatasetRetriever,
     VerilogAddersMongrelgemDatasetRetriever,
@@ -279,6 +280,15 @@ def test_deepbenchverilog_retriever() -> None:
 
 def test_deepbenchverilog_validate() -> None:
     auto_validate(d, DeepBenchVerilogDatasetRetriever, n_jobs=n_jobs)
+
+
+### MCNC20DatasetRetriever ###
+def test_mcnc20_retriever() -> None:
+    auto_retriever(d, MCNC20DatasetRetriever)
+
+
+def test_mcnc20_validate() -> None:
+    auto_validate(d, MCNC20DatasetRetriever, n_jobs=n_jobs)
 
 
 ### PolybenchRetriever ###

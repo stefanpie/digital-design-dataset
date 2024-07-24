@@ -1112,14 +1112,32 @@ class Texas97DatasetRetriever(DataRetriever):
         raise NotImplementedError
 
 
+RE_EXDC = re.compile(r"\.exdc[\S\s]*?\.end", re.MULTILINE)
+
+
+def remove_exdc(fp: Path) -> None:
+    t = fp.read_text()
+    t = RE_EXDC.sub(".end", t)
+    fp.write_text(t)
+
+
 class MCNC20DatasetRetriever(DataRetriever):
     dataset_name: str = "mcnc20"
     dataset_tags: ClassVar[list[str]] = ["benchmark"]
 
     DATA_URL: str = "https://ddd.fit.cvut.cz/www/prj/Benchmarks/MCNC.7z"
 
-    # TODO: Implement this, requires blif conversion
-    def get_dataset(self, _overwrite: bool = False) -> None:
+    BLACKLIST: ClassVar[list[str]] = [
+        "alu3",
+    ]
+
+    @staticmethod
+    def fix_missing_end(fp: Path) -> None:
+        t = fp.read_text()
+        t += "\n.end"
+        fp.write_text(t)
+
+    def get_dataset(self, _overwrite: bool = False, timeout: int = 30) -> None:
         # check for yosys
         yosys_bin = auto_find_bin("yosys")
         if yosys_bin is None:
@@ -1129,7 +1147,68 @@ class MCNC20DatasetRetriever(DataRetriever):
                 "YOSYS_PATH environment variable.",
             )
 
-        raise NotImplementedError
+        r = requests.get(self.DATA_URL, timeout=timeout)
+        if r.status_code != requests.codes.ok:
+            raise RuntimeError(f"Failed to download {self.dataset_name} dataset")
+
+        archive = py7zr.SevenZipFile(io.BytesIO(r.content), "r")
+        design_files = [p for p in archive.getnames() if p.endswith(".blif")]
+        for design_file in design_files:
+            name = design_file.split("/")[-1].removesuffix(".blif")
+            design_name = f"mcnc20__{name}"
+
+            design_dir = self.design_dataset.designs_dir / design_name
+            if design_dir.exists():
+                shutil.rmtree(design_dir)
+            design_dir.mkdir(parents=True, exist_ok=True)
+
+            metadata = {}
+            metadata["design_name"] = design_name
+            metadata["dataset_name"] = self.dataset_name
+            metadata["dataset_tags"] = self.dataset_tags
+            metadata_fp = design_dir / "design.json"
+            metadata_fp.write_text(json.dumps(metadata, indent=4))
+
+            source_blif_file_dir = design_dir / "sources_blif"
+            source_blif_file_dir.mkdir(parents=True, exist_ok=True)
+            archive.extract(targets=[design_file], path=source_blif_file_dir)
+            archive.reset()
+
+            current_fp = source_blif_file_dir / Path(design_file)
+            new_fp = source_blif_file_dir / Path(design_file).name
+            current_fp.rename(new_fp)
+
+            if ".exdc" in new_fp.read_text():
+                remove_exdc(new_fp)
+
+            if name in {"i10", "i2", "i3", "i4", "i5", "i6", "i7"}:
+                self.fix_missing_end(new_fp)
+
+            source_file_dir = design_dir / "sources"
+            source_file_dir.mkdir(parents=True, exist_ok=True)
+
+            yosys_script = f"""
+            read_blif -sop {source_blif_file_dir / new_fp}
+            techmap t:$sop
+            write_verilog {source_file_dir / name}.v
+            """
+
+            temp_dir_yosys = TemporaryDirectory()
+            temp_dir_fp_yosys = Path(temp_dir_yosys.name)
+            temp_script_fp = temp_dir_fp_yosys / "script.ys"
+            temp_script_fp.write_text(yosys_script)
+
+            p = subprocess.run(
+                [yosys_bin, "-s", temp_script_fp],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            if p.returncode != 0:
+                raise RuntimeError(
+                    f"Yosys failed to convert {new_fp} to Verilog:\n{p.stdout}\n{p.stderr}\n",
+                )
 
 
 class DeepBenchVerilogDatasetRetriever(DataRetriever):
