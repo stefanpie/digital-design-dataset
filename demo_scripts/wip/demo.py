@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from digital_design_dataset.dataset.datasets import (
+from digital_design_dataset.data_sources.data_retrievers import (
     EPFLDatasetRetriever,
     KoiosDatasetRetriever,
     OPDBDatasetRetriever,

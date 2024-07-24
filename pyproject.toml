@@ -37,8 +37,10 @@ addopts = ["-s", "-v", "--cov=digital_design_dataset", "--cov-report=html", "--c
 log_cli = true
 
 
+
+
 [tool.ruff]
-line-length = 88
+line-length = 120
 preview = true
 exclude = [
     "*.ipynb"

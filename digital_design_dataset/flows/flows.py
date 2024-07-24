@@ -2,7 +2,7 @@ import json
 import logging
 import shutil
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, ClassVar
 
 import networkx as nx
 import tqdm
@@ -20,7 +20,7 @@ from digital_design_dataset.logger import build_logger
 
 class Flow(ABC):
     flow_name: str
-    flow_type: str  # TODO: Change to be more like tags, like a list[str]
+    flow_tags: ClassVar[list[str]]
 
     def __init__(self, design_dataset: DesignDataset) -> None:
         self.design_dataset = design_dataset
@@ -38,13 +38,13 @@ class Flow(ABC):
 
 
 class LineCountFlow(Flow):
-    flow_name = "line_count"
-    flow_type = "text"
+    flow_name: str = "line_count"
+    flow_tags: ClassVar[list[str]] = ["text"]
 
     def build_flow_single(
         self,
         design: dict[str, Any],
-        overwrite: bool = False,
+        _overwrite: bool = False,
     ) -> None:
         # count number of lines in a design
         design_dir = self.design_dataset.designs_dir / design["design_name"]
@@ -63,7 +63,7 @@ class LineCountFlow(Flow):
 
         flow_metadata = {
             "flow_name": self.flow_name,
-            "flow_type": self.flow_type,
+            "flow_tags": self.flow_tags,
             "num_lines": lines,
         }
 
@@ -75,15 +75,12 @@ class LineCountFlow(Flow):
 
     def build_flow(self, overwrite: bool = False, n_jobs: int = 1) -> None:
         designs = self.design_dataset.index
-        Parallel(n_jobs=n_jobs)(
-            delayed(self.build_flow_single)(design, overwrite=overwrite)
-            for design in designs
-        )
+        Parallel(n_jobs=n_jobs)(delayed(self.build_flow_single)(design, overwrite=overwrite) for design in designs)
 
 
 class ModuleInfoFlow(Flow):
-    flow_name = "module_count"
-    flow_type = "text"
+    flow_name: str = "module_count"
+    flow_tags: ClassVar[list[str]] = ["text"]
 
     def __init__(self, design_dataset: DesignDataset, yosys_bin: str = "yosys") -> None:
         super().__init__(design_dataset)
@@ -101,9 +98,7 @@ class ModuleInfoFlow(Flow):
         sources_dir = design_dir / "sources"
         sources_fps = [f for f in sources_dir.iterdir() if f.is_file()]
 
-        verilog_sources_fps = [
-            f for f in sources_fps if f.suffix in VERILOG_SOURCE_EXTENSIONS_SET
-        ]
+        verilog_sources_fps = [f for f in sources_fps if f.suffix in VERILOG_SOURCE_EXTENSIONS_SET]
 
         modules = extract_design_hierarchy(verilog_sources_fps)
         num_modules = len(modules)
@@ -115,7 +110,7 @@ class ModuleInfoFlow(Flow):
 
         flow_metadata = {
             "flow_name": self.flow_name,
-            "flow_type": self.flow_type,
+            "flow_tags": self.flow_tags,
             "modules": modules,
             "num_modules": num_modules,
         }
@@ -132,15 +127,14 @@ class ModuleInfoFlow(Flow):
     def build_flow(self, overwrite: bool = False, n_jobs: int = 1) -> None:
         designs = self.design_dataset.index
         Parallel(n_jobs=n_jobs)(
-            delayed(self.build_flow_single)(design, overwrite=overwrite)
-            for design in tqdm.tqdm(designs)
+            delayed(self.build_flow_single)(design, overwrite=overwrite) for design in tqdm.tqdm(designs)
         )
         self.build_flow_single(designs[0], overwrite=overwrite)
 
 
 class VeribleASTFlow(Flow):
-    flow_name = "yosys_ast"
-    flow_type = "graph"
+    flow_name: str = "verible_ast"
+    flow_tags: ClassVar[list[str]] = ["text"]
 
     def __init__(
         self,
@@ -159,7 +153,6 @@ class VeribleASTFlow(Flow):
         sources_dir = design_dir / "sources"
         sources_fps = [f for f in sources_dir.iterdir() if f.is_file()]
 
-        # TODO: add overwrite functionality
         flow_dir = design_dir / "flows" / self.flow_name
         if flow_dir.exists():
             shutil.rmtree(flow_dir)
@@ -174,7 +167,7 @@ class VeribleASTFlow(Flow):
 
         flow_metadata = {}
         flow_metadata["flow_name"] = self.flow_name
-        flow_metadata["flow_type"] = self.flow_type
+        flow_metadata["flow_tags"] = self.flow_tags
         design_metadata["flows"][self.flow_name] = flow_metadata
 
         design_metadata_fp.write_text(json.dumps(design_metadata, indent=4))
@@ -195,15 +188,12 @@ class VeribleASTFlow(Flow):
 
     def build_flow(self, overwrite: bool = False, n_jobs: int = 1) -> None:
         designs = self.design_dataset.index
-        Parallel(n_jobs=n_jobs)(
-            delayed(self.build_flow_single)(design, overwrite=overwrite)
-            for design in designs
-        )
+        Parallel(n_jobs=n_jobs)(delayed(self.build_flow_single)(design, overwrite=overwrite) for design in designs)
 
 
 class YosysAIGFlow(Flow):
-    flow_name = "yosys_aig"
-    flow_type = "graph"
+    flow_name: str = "yosys_aig"
+    flow_tags: ClassVar[list[str]] = ["synthesis"]
 
     def __init__(self, design_dataset: DesignDataset, yosys_bin: str = "yosys") -> None:
         super().__init__(design_dataset)
@@ -217,11 +207,8 @@ class YosysAIGFlow(Flow):
         design_dir = self.design_dataset.designs_dir / design["design_name"]
         sources_dir = design_dir / "sources"
         sources_fps = [f for f in sources_dir.iterdir() if f.is_file()]
-        sources_fps = [
-            f for f in sources_fps if f.suffix in VERILOG_SOURCE_EXTENSIONS_SET
-        ]
+        sources_fps = [f for f in sources_fps if f.suffix in VERILOG_SOURCE_EXTENSIONS_SET]
 
-        # TODO: add overwrite functionality
         flow_dir = design_dir / "flows" / self.flow_name
         if flow_dir.exists():
             shutil.rmtree(flow_dir)
@@ -236,7 +223,7 @@ class YosysAIGFlow(Flow):
 
         flow_metadata = {}
         flow_metadata["flow_name"] = self.flow_name
-        flow_metadata["flow_type"] = self.flow_type
+        flow_metadata["flow_tags"] = self.flow_tags
         design_metadata["flows"][self.flow_name] = flow_metadata
 
         design_metadata_fp.write_text(json.dumps(design_metadata, indent=4))
@@ -264,14 +251,13 @@ class YosysAIGFlow(Flow):
     def build_flow(self, overwrite: bool = False, n_jobs: int = 1) -> None:
         designs = self.design_dataset.index
         Parallel(n_jobs=n_jobs, backend="loky")(
-            delayed(self.build_flow_single)(design, overwrite=overwrite)
-            for design in tqdm.tqdm(designs)
+            delayed(self.build_flow_single)(design, overwrite=overwrite) for design in tqdm.tqdm(designs)
         )
 
 
 class YosysXilinxSynthFlow(Flow):
-    flow_name = "yosys_xilinx_synth"
-    flow_type = "graph"
+    flow_name: str = "yosys_xilinx_synth"
+    flow_tags: ClassVar[list[str]] = ["synthesis"]
 
     def __init__(self, design_dataset: DesignDataset, yosys_bin: str = "yosys") -> None:
         super().__init__(design_dataset)
@@ -282,49 +268,52 @@ class YosysXilinxSynthFlow(Flow):
         design: dict[str, Any],
         overwrite: bool = False,
     ) -> None:
-        design_dir = self.design_dataset.designs_dir / design["design_name"]
-        sources_dir = design_dir / "sources"
-        sources_fps = [f for f in sources_dir.iterdir() if f.is_file()]
-        sources_fps = [
-            f for f in sources_fps if f.suffix in VERILOG_SOURCE_EXTENSIONS_SET
-        ]
+        raise NotImplementedError
 
 
 class ModuleHierarchyFlow(Flow):
-    flow_name = "submodule_hierarchy"
-    flow_type = "source"
+    flow_name: str = "module_hierarchy"
+    flow_tags: ClassVar[list[str]] = ["text"]
 
     def build_flow(self, overwrite: bool = False, n_jobs: int = 1) -> None:
         raise NotImplementedError
 
 
 class ISEFlow(Flow):
-    flow_name = "ise"
-    flow_type = "source"
+    flow_name: str = "ise"
+    flow_tags: ClassVar[list[str]] = ["synthesis", "implementation", "fpga"]
 
     def build_flow(self, overwrite: bool = False, n_jobs: int = 1) -> None:
         raise NotImplementedError
 
 
 class VivadoFlow(Flow):
-    flow_name = "vivado"
-    flow_type = "source"
+    flow_name: str = "vivado"
+    flow_tags: ClassVar[list[str]] = ["synthesis", "implementation", "fpga"]
 
     def build_flow(self, overwrite: bool = False, n_jobs: int = 1) -> None:
         raise NotImplementedError
 
 
 class QuartusFlow(Flow):
-    flow_name = "quartus"
-    flow_type = "source"
+    flow_name: str = "quartus"
+    flow_tags: ClassVar[list[str]] = ["synthesis", "implementation", "fpga"]
+
+    def build_flow(self, overwrite: bool = False, n_jobs: int = 1) -> None:
+        raise NotImplementedError
+
+
+class VTRFlow(Flow):
+    flow_name: str = "vtr"
+    flow_tags: ClassVar[list[str]] = ["synthesis", "implementation", "fpga"]
 
     def build_flow(self, overwrite: bool = False, n_jobs: int = 1) -> None:
         raise NotImplementedError
 
 
 class OpenRoadFlow(Flow):
-    flow_name = "openroad"
-    flow_type = "source"
+    flow_name: str = "openroad"
+    flow_tags: ClassVar[list[str]] = ["synthesis", "implementation", "asic"]
 
     def build_flow(self, overwrite: bool = False, n_jobs: int = 1) -> None:
         raise NotImplementedError

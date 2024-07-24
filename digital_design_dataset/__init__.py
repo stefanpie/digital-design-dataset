@@ -1,5 +1,5 @@
 # __init__.py
 
-from . import dataset, flows
+from . import data_sources, flows
 
-__all__ = ["dataset", "flows"]
+__all__ = ["data_sources", "flows"]

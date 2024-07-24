@@ -4,7 +4,7 @@ from pprint import pp
 
 from dotenv import dotenv_values
 
-from digital_design_dataset.dataset.datasets import OpencoresDatasetRetriever
+from digital_design_dataset.data_sources.data_retrievers import OpencoresDatasetRetriever
 from digital_design_dataset.design_dataset import (
     HARDWARE_DATA_TEXT_EXTENSIONS,
     HARDWARE_DATA_TEXT_EXTENSIONS_SET,
@@ -64,7 +64,6 @@ def test_decompose_structured() -> None:
         source_files = sorted(d.rglob("**/*.v"))
         data_decomposed = decompose_design_structured(source_files)
         assert data_decomposed
-        # pp(data_decomposed)
 
 
 def test_decompose_text() -> None:
@@ -73,10 +72,6 @@ def test_decompose_text() -> None:
         source_files = sorted(d.rglob("**/*.v"))
         data_decomposed = decompose_design_text(source_files)
         assert data_decomposed
-        pp(data_decomposed)
-
-
-# load design dataset
 
 
 db_path = test_path / "db"
@@ -94,9 +89,7 @@ def rank_designs_by_size(d: DesignDataset, designs: list[dict]) -> list[dict]:
         design_dir = d.designs_dir / design_name
         sources_dir = design_dir / "sources"
         sources_fps = [f for f in sources_dir.iterdir() if f.is_file()]
-        verilog_sources_fps = [
-            f for f in sources_fps if f.suffix in VERILOG_SOURCE_EXTENSIONS_SET
-        ]
+        verilog_sources_fps = [f for f in sources_fps if f.suffix in VERILOG_SOURCE_EXTENSIONS_SET]
         size = sum(len(f.read_text()) for f in verilog_sources_fps)
         sizes.append((design, size))
     # small to large
@@ -132,9 +125,7 @@ def test_decompose_structured__opencores() -> None:
         design_dir = d.designs_dir / design_name
         sources_dir = design_dir / "sources"
         sources_fps = [f for f in sources_dir.iterdir() if f.is_file()]
-        verilog_sources_fps = [
-            f for f in sources_fps if f.suffix in VERILOG_SOURCE_EXTENSIONS_SET
-        ]
+        verilog_sources_fps = [f for f in sources_fps if f.suffix in VERILOG_SOURCE_EXTENSIONS_SET]
         print(
             f"{i + 1}/{num_designs} Decomposing {design_name} using structured approach",
         )
@@ -152,12 +143,8 @@ def test_decompose_text__opencores() -> None:
         design_dir = d.designs_dir / design_name
         sources_dir = design_dir / "sources"
         sources_fps = [f for f in sources_dir.iterdir() if f.is_file()]
-        verilog_sources_fps = [
-            f for f in sources_fps if f.suffix in VERILOG_SOURCE_EXTENSIONS_SET
-        ]
-        data_files = [
-            f for f in sources_fps if f.suffix in HARDWARE_DATA_TEXT_EXTENSIONS_SET
-        ]
+        verilog_sources_fps = [f for f in sources_fps if f.suffix in VERILOG_SOURCE_EXTENSIONS_SET]
+        data_files = [f for f in sources_fps if f.suffix in HARDWARE_DATA_TEXT_EXTENSIONS_SET]
         if data_files == []:
             data_files = None
 
@@ -187,9 +174,7 @@ def test_decompose_structured__edge_cases() -> None:
         design_dir = d.designs_dir / design_name
         sources_dir = design_dir / "sources"
         sources_fps = [f for f in sources_dir.iterdir() if f.is_file()]
-        verilog_sources_fps = [
-            f for f in sources_fps if f.suffix in VERILOG_SOURCE_EXTENSIONS_SET
-        ]
+        verilog_sources_fps = [f for f in sources_fps if f.suffix in VERILOG_SOURCE_EXTENSIONS_SET]
 
         print(f"Decomposing {design_name} using structured approach")
         data_decomposed = decompose_design_structured(verilog_sources_fps)
@@ -217,9 +202,7 @@ def test_decompose_text__edge_cases() -> None:
         design_dir = d.designs_dir / design_name
         sources_dir = design_dir / "sources"
         sources_fps = [f for f in sources_dir.iterdir() if f.is_file()]
-        verilog_sources_fps = [
-            f for f in sources_fps if f.suffix in VERILOG_SOURCE_EXTENSIONS_SET
-        ]
+        verilog_sources_fps = [f for f in sources_fps if f.suffix in VERILOG_SOURCE_EXTENSIONS_SET]
 
         print(f"Decomposing {design_name} using text approach")
         data_decomposed = decompose_design_text(verilog_sources_fps)

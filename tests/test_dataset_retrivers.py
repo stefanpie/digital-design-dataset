@@ -6,6 +6,8 @@ from pathlib import Path
 from dotenv import dotenv_values
 from joblib import Parallel, delayed
 
+from digital_design_dataset.data_sources.hls_data import PolybenchRetriever
+
 try:
     from pytest_cov.embed import cleanup_on_sigterm
 except ImportError:
@@ -13,9 +15,9 @@ except ImportError:
 else:
     cleanup_on_sigterm()
 
-from digital_design_dataset.dataset.datasets import (
+from digital_design_dataset.data_sources.data_retrievers import (
     AddersCVUTDatasetRetriever,
-    DatasetRetriever,
+    DataRetriever,
     DeepBenchVerilogDatasetRetriever,
     EPFLDatasetRetriever,
     HW2VecDatasetRetriever,
@@ -64,8 +66,8 @@ if not n_jobs_val:
     raise ValueError("N_JOBS not defined in .env file")
 try:
     n_jobs = int(n_jobs_val)
-except ValueError:
-    raise ValueError("N_JOBS must be an integer")
+except ValueError as e:
+    raise ValueError("N_JOBS must be an integer") from e
 if n_jobs < 1:
     raise ValueError("N_JOBS must be greater than 0")
 
@@ -78,7 +80,7 @@ d = DesignDataset(
     gh_token=gh_token,
 )
 
-logger = build_logger("test_dataset_retrievers", logging.DEBUG)
+logger = build_logger("test_dataset_retrievers", logging.INFO)
 
 
 def remove_existing_dataset_designs(d: DesignDataset, retriever_name: str) -> None:
@@ -89,7 +91,7 @@ def remove_existing_dataset_designs(d: DesignDataset, retriever_name: str) -> No
 
 def auto_retriever(
     d: DesignDataset,
-    retriever_class: type[DatasetRetriever],
+    retriever_class: type[DataRetriever],
 ) -> None:
     r = retriever_class(d)
     remove_existing_dataset_designs(d, r.__class__.dataset_name)
@@ -113,7 +115,7 @@ def run_single(
 
 def auto_validate(
     d: DesignDataset,
-    retriever_class: type[DatasetRetriever],
+    retriever_class: type[DataRetriever],
     n_jobs: int = 1,
 ) -> None:
     if n_jobs < 1:
@@ -177,7 +179,7 @@ def test_iscas89_retriever() -> None:
 
 
 def test_iscas89_validate() -> None:
-    auto_validate(d, ISCAS89DatasetRetriever)
+    auto_validate(d, ISCAS89DatasetRetriever, n_jobs=n_jobs)
 
 
 ### KoiosDatasetRetriever ###
@@ -204,7 +206,7 @@ def test_lgsynth91_retriever() -> None:
 
 
 def test_lgsynth91_validate() -> None:
-    auto_validate(d, LGSynth91DatasetRetriever)
+    auto_validate(d, LGSynth91DatasetRetriever, n_jobs=n_jobs)
 
 
 ### OPDBDatasetRetriever ###
@@ -213,9 +215,7 @@ def test_opdb_retriever() -> None:
 
 
 def test_opdb_validate() -> None:
-    # TODO: run in parallel
-    # TODO: not tested yet
-    auto_validate(d, OPDBDatasetRetriever)
+    auto_validate(d, OPDBDatasetRetriever, n_jobs=n_jobs)
 
 
 ### OpencoresDatasetRetriever ###
@@ -224,9 +224,7 @@ def test_opencores_retriever() -> None:
 
 
 def test_opencores_validate() -> None:
-    # TODO: run in parallel
-    # TODO: not tested yet
-    auto_validate(d, OpencoresDatasetRetriever)
+    auto_validate(d, OpencoresDatasetRetriever, n_jobs=n_jobs)
 
 
 ### VTRDatasetRetriever ###
@@ -244,7 +242,7 @@ def test_iwls93_retriever() -> None:
 
 
 def test_iwls93_validate() -> None:
-    auto_validate(d, IWLS93DatasetRetriever)
+    auto_validate(d, IWLS93DatasetRetriever, n_jobs=n_jobs)
 
 
 ### I99TDatasetRetriever ###
@@ -253,7 +251,7 @@ def test_i99t_retriever() -> None:
 
 
 def test_i99t_validate() -> None:
-    auto_validate(d, I99TDatasetRetriever)
+    auto_validate(d, I99TDatasetRetriever, n_jobs=n_jobs)
 
 
 ### AddersCVUTDatasetRetriever ###
@@ -262,7 +260,7 @@ def test_adderscvut_retriever() -> None:
 
 
 def test_adderscvut_validate() -> None:
-    auto_validate(d, AddersCVUTDatasetRetriever)
+    auto_validate(d, AddersCVUTDatasetRetriever, n_jobs=n_jobs)
 
 
 ### VerilogAddersMongrelgemDatasetRetriever ###
@@ -271,7 +269,7 @@ def test_verilog_adders_mongrelgem_retriever() -> None:
 
 
 def test_verilog_adders_mongrelgem_validate() -> None:
-    auto_validate(d, VerilogAddersMongrelgemDatasetRetriever)
+    auto_validate(d, VerilogAddersMongrelgemDatasetRetriever, n_jobs=n_jobs)
 
 
 ### DeepBenchVerilogDatasetRetriever ###
@@ -281,3 +279,12 @@ def test_deepbenchverilog_retriever() -> None:
 
 def test_deepbenchverilog_validate() -> None:
     auto_validate(d, DeepBenchVerilogDatasetRetriever, n_jobs=n_jobs)
+
+
+### PolybenchRetriever ###
+def test_polybench_retriever() -> None:
+    auto_retriever(d, PolybenchRetriever)
+
+
+def test_polybench_validate() -> None:
+    auto_validate(d, PolybenchRetriever, n_jobs=n_jobs)

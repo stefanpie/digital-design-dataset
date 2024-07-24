@@ -4,9 +4,11 @@ import os
 import re
 import shutil
 from collections import Counter
+from collections.abc import Generator, Iterator
 from pathlib import Path
 
 from github import Auth, Github
+from pydantic import BaseModel
 
 VERILOG_SOURCE_EXTENSIONS = [".v", ".sv", ".svh", ".vh", ".h", ".inc"]
 VERILOG_SOURCE_EXTENSIONS_SET = set(VERILOG_SOURCE_EXTENSIONS) | {
@@ -32,7 +34,8 @@ SOURCE_FILES_EXTENSIONS_SET = (
 #   this reuires non-trivial changes but is worth it
 
 
-class DirectoryNotEmptyError(Exception): ...
+class DirectoryNotEmptyError(FileExistsError):
+    pass
 
 
 def make_dir_if_not_empty(path: Path) -> None:
@@ -84,6 +87,7 @@ class DesignDataset:
 
     @property
     def index(self) -> list[dict]:
+        # sorted by "design_name"
         designs = []
         for design_dir in self.designs_dir.iterdir():
             design_json_fp = design_dir / "design.json"
@@ -93,10 +97,14 @@ class DesignDataset:
         designs = sorted(designs, key=operator.itemgetter("design_name"))
         return designs
 
-    # TODO: make index as a generator
     @property
-    def index_generator(self) -> None:
-        raise NotImplementedError
+    def index_generator(self) -> Iterator[dict]:
+        # not guaranteed to be in sorted by "design_name"
+        for design_dir in self.designs_dir.iterdir():
+            design_json_fp = design_dir / "design.json"
+            with design_json_fp.open() as f:
+                design = json.load(f)
+            yield design
 
     def summary(self) -> str:
         summary = f"Dataset at {self.dataset_dir}\n"

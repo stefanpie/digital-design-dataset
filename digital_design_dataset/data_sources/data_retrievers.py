@@ -5,7 +5,7 @@ import re
 import shutil
 import subprocess
 import zipfile
-from collections import defaultdict
+from abc import ABC, abstractmethod
 from pathlib import Path
 from pprint import pp
 from tempfile import TemporaryDirectory
@@ -42,7 +42,7 @@ def get_file_from_github(
         download_url = data.download_url
         r = requests.get(download_url, timeout=timeout)
         # if r.status_code != requests.status_codes.codes.ok:
-        if r.status_code != 200:
+        if r.status_code != requests.codes.ok:
             raise RuntimeError(
                 f"Failed to make request: {r.status_code}\n{r.text}\n{r.headers}",
             )
@@ -78,39 +78,33 @@ def get_listing_from_github(
     return listing
 
 
-class DatasetRetriever:
+class DataRetriever(ABC):
     dataset_name: str
-    dataset_type: str  # TODO: Change to be more like tags, like a list[str]
+    dataset_tags: ClassVar[list[str]]
 
     def __init__(self, design_dataset: DesignDataset) -> None:
         self.design_dataset = design_dataset
 
-    def get_dataset(self, overwrite: bool = False) -> None:
-        raise NotImplementedError
+    @abstractmethod
+    def get_dataset(self, overwrite: bool = False) -> None: ...
 
     def remove_dataset(self) -> None:
-        designs = [
-            d
-            for d in self.design_dataset.index
-            if d["dataset_name"] == self.dataset_name
-        ]
+        designs = [d for d in self.design_dataset.index if d["dataset_name"] == self.dataset_name]
         for design in designs:
             design_dir = self.design_dataset.designs_dir / design["design_name"]
             if design_dir.exists():
                 shutil.rmtree(design_dir)
 
 
-class OpencoresDatasetRetriever(DatasetRetriever):
-    dataset_name = "opencores"
-    dataset_type = "opencores"
+class OpencoresDatasetRetriever(DataRetriever):
+    dataset_name: str = "opencores"
+    dataset_tags: ClassVar[list[str]] = ["open_source"]
 
     BLACKLIST: ClassVar = [
         "6809_6309_compatible_core",
     ]
 
-    # https://github.com/stefanpie/hardware-design-dataset-opencores
-
-    def get_dataset(self, overwrite: bool = False) -> None:
+    def get_dataset(self, _overwrite: bool = False, timeout: int = 30) -> None:
         download_url = get_file_download_url_from_github(
             self.design_dataset.gh_api,
             "stefanpie",
@@ -120,9 +114,9 @@ class OpencoresDatasetRetriever(DatasetRetriever):
 
         r = requests.get(
             download_url,
-            timeout=30,
-        )  # TODO: add a way for user to specify timeout
-        if r.status_code != 200:
+            timeout=timeout,
+        )
+        if r.status_code != requests.codes.ok:
             raise RuntimeError(
                 f"Failed to make request: {r.status_code}\n{r.text}\n{r.headers}",
             )
@@ -132,7 +126,7 @@ class OpencoresDatasetRetriever(DatasetRetriever):
             # get only top level folders "designs/*/"
             # folders may be nested, so we need to check if the folder
             # is a top level folder
-            if (fn[-1] == "/") and (fn.count("/") == 2):
+            if (fn[-1] == "/") and (fn.count("/") == 2):  # noqa: PLR2004
                 designs.append(fn)
 
         for fn in designs:
@@ -148,7 +142,7 @@ class OpencoresDatasetRetriever(DatasetRetriever):
             metadata = {}
             metadata["design_name"] = design_name
             metadata["dataset_name"] = self.dataset_name
-            metadata["dataset_type"] = self.dataset_type
+            metadata["dataset_tags"] = self.dataset_tags
             metadata_fp = design_dir / "design.json"
             metadata_fp.write_text(json.dumps(metadata, indent=4))
 
@@ -159,26 +153,25 @@ class OpencoresDatasetRetriever(DatasetRetriever):
             source_file_dir.mkdir(parents=True, exist_ok=True)
 
             for file in z.namelist():
-                if file.startswith(f"designs/{base_name}/"):
-                    if file[-1] != "/":
-                        file_name = file.split("/")[-1]
-                        extension = file_name.split(".")[-1]
-                        if f".{extension}" in SOURCE_FILES_EXTENSIONS_SET:
-                            fp = source_file_dir / file_name
-                            fp.write_text(z.read(file).decode("utf-8"))
-                        else:
-                            fp = aux_files_dir / file_name
-                            fp.write_text(z.read(file).decode("utf-8"))
+                if file.startswith(f"designs/{base_name}/") and file[-1] != "/":
+                    file_name = file.split("/")[-1]
+                    extension = file_name.split(".")[-1]
+                    if f".{extension}" in SOURCE_FILES_EXTENSIONS_SET:
+                        fp = source_file_dir / file_name
+                        fp.write_text(z.read(file).decode("utf-8"))
+                    else:
+                        fp = aux_files_dir / file_name
+                        fp.write_text(z.read(file).decode("utf-8"))
         z.close()
 
 
-class HW2VecDatasetRetriever(DatasetRetriever):
-    dataset_name = "hw_2_vec"
-    dataset_type = "academic"
+class HW2VecDatasetRetriever(DataRetriever):
+    dataset_name: str = "hw_2_vec"
+    dataset_tags: ClassVar[list[str]] = ["benchmark"]
 
     BLACKLIST = "RS232-T100"
 
-    def get_dataset(self, overwrite: bool = False) -> None:
+    def get_dataset(self, _overwrite: bool = False, timeout: int = 30) -> None:
         download_url = get_file_download_url_from_github(
             self.design_dataset.gh_api,
             "AICPS",
@@ -186,9 +179,9 @@ class HW2VecDatasetRetriever(DatasetRetriever):
             "assets/datasets.zip",
         )
 
-        r = requests.get(download_url, timeout=30)
+        r = requests.get(download_url, timeout=timeout)
         # if r.status_code != requests.status_codes.codes.ok:
-        if r.status_code != 200:
+        if r.status_code != requests.codes.ok:
             raise RuntimeError(
                 f"Failed to make request: {r.status_code}\n{r.text}\n{r.headers}",
             )
@@ -212,7 +205,7 @@ class HW2VecDatasetRetriever(DatasetRetriever):
             metadata = {}
             metadata["design_name"] = design_name
             metadata["dataset_name"] = self.dataset_name
-            metadata["dataset_type"] = self.dataset_type
+            metadata["dataset_tags"] = self.dataset_tags
             metadata_fp = design_dir / "design.json"
             metadata_fp.write_text(json.dumps(metadata, indent=4))
 
@@ -225,9 +218,9 @@ class HW2VecDatasetRetriever(DatasetRetriever):
         z.close()
 
 
-class VTRDatasetRetriever(DatasetRetriever):
-    dataset_name = "vtr"
-    dataset_type = "academic"
+class VTRDatasetRetriever(DataRetriever):
+    dataset_name: str = "vtr"
+    dataset_tags: ClassVar[list[str]] = ["benchmark"]
 
     BLACKLIST = (
         "LU8PEEng",
@@ -240,7 +233,7 @@ class VTRDatasetRetriever(DatasetRetriever):
     # leading to long runtime and out-of-memory issues
     # TODO: find workaround in the future
 
-    def get_dataset(self, overwrite: bool = True) -> None:
+    def get_dataset(self, _overwrite: bool = True) -> None:
         listing = get_listing_from_github(
             self.design_dataset.gh_api,
             "verilog-to-routing",
@@ -290,7 +283,7 @@ class VTRDatasetRetriever(DatasetRetriever):
             metadata = {}
             metadata["design_name"] = design_name
             metadata["dataset_name"] = self.dataset_name
-            metadata["dataset_type"] = self.dataset_type
+            metadata["dataset_tags"] = self.dataset_tags
             metadata_fp = design_dir / "design.json"
             metadata_fp.write_text(json.dumps(metadata, indent=4))
 
@@ -310,11 +303,11 @@ class VTRDatasetRetriever(DatasetRetriever):
             design_primitives_fp.write_text(primitives_file_txt)
 
 
-class KoiosDatasetRetriever(DatasetRetriever):
-    dataset_name = "koios"
-    dataset_type = "academic"
+class KoiosDatasetRetriever(DataRetriever):
+    dataset_name: str = "koios"
+    dataset_tags: ClassVar[list[str]] = ["benchmark"]
 
-    def get_dataset(self, overwrite: bool = False) -> None:
+    def get_dataset(self, _overwrite: bool = False) -> None:
         listing = get_listing_from_github(
             self.design_dataset.gh_api,
             "verilog-to-routing",
@@ -344,7 +337,7 @@ class KoiosDatasetRetriever(DatasetRetriever):
             metadata = {}
             metadata["design_name"] = design_name
             metadata["dataset_name"] = self.dataset_name
-            metadata["dataset_type"] = self.dataset_type
+            metadata["dataset_tags"] = self.dataset_tags
             metadata_fp = design_dir / "design.json"
             metadata_fp.write_text(json.dumps(metadata, indent=4))
 
@@ -360,11 +353,11 @@ class KoiosDatasetRetriever(DatasetRetriever):
             design_fp.write_text(text)
 
 
-class EPFLDatasetRetriever(DatasetRetriever):
-    dataset_name = "epfl"
-    dataset_type = "academic"
+class EPFLDatasetRetriever(DataRetriever):
+    dataset_name: str = "epfl"
+    dataset_tags: ClassVar[list[str]] = ["benchmark"]
 
-    def get_dataset(self, overwrite: bool = False) -> None:
+    def get_dataset(self, _overwrite: bool = False) -> None:
         listing_0 = get_listing_from_github(
             self.design_dataset.gh_api,
             "lsils",
@@ -400,7 +393,7 @@ class EPFLDatasetRetriever(DatasetRetriever):
             metadata = {}
             metadata["design_name"] = design_name
             metadata["dataset_name"] = self.dataset_name
-            metadata["dataset_type"] = self.dataset_type
+            metadata["dataset_tags"] = self.dataset_tags
             metadata_fp = design_dir / "design.json"
             metadata_fp.write_text(json.dumps(metadata, indent=4))
 
@@ -416,11 +409,11 @@ class EPFLDatasetRetriever(DatasetRetriever):
             design_fp.write_text(text)
 
 
-class OPDBDatasetRetriever(DatasetRetriever):
-    dataset_name = "opdb"
-    dataset_type = "academic"
+class OPDBDatasetRetriever(DataRetriever):
+    dataset_name: str = "opdb"
+    dataset_tags: ClassVar[list[str]] = ["benchmark"]
 
-    def get_dataset(self, overwrite: bool = False) -> None:
+    def get_dataset(self, _overwrite: bool = False) -> None:
         design_list = get_file_from_github(
             self.design_dataset.gh_api,
             "PrincetonUniversity",
@@ -429,9 +422,7 @@ class OPDBDatasetRetriever(DatasetRetriever):
         )
 
         for design in design_list.splitlines():
-            base_name = (
-                "_".join(design.split("/")[1:]).replace(".v", "").replace(".pickle", "")
-            )
+            base_name = "_".join(design.split("/")[1:]).replace(".v", "").replace(".pickle", "")
             design_name = f"opdb__{base_name}"
             design_dir = self.design_dataset.designs_dir / design_name
             if design_dir.exists():
@@ -441,7 +432,7 @@ class OPDBDatasetRetriever(DatasetRetriever):
             metadata = {}
             metadata["design_name"] = design_name
             metadata["dataset_name"] = self.dataset_name
-            metadata["dataset_type"] = self.dataset_type
+            metadata["dataset_tags"] = self.dataset_tags
             metadata_fp = design_dir / "design.json"
             metadata_fp.write_text(json.dumps(metadata, indent=4))
 
@@ -453,30 +444,28 @@ class OPDBDatasetRetriever(DatasetRetriever):
                 "OPDB",
                 design,
             )
-            Path(source_file_dir / (base_name + ".v")).write_text(text)
+            Path(source_file_dir / (base_name + ".v")).write_text(text, encoding="utf-8")
 
 
-class ISCAS85DatasetRetriever(DatasetRetriever):
+class ISCAS85DatasetRetriever(DataRetriever):
     dataset_name: str = "iscas85"
-    dataset_type: str = "academic"
+    dataset_tags: ClassVar[list[str]] = ["benchmark"]
 
     ISCAS_85_89_URL = "https://ddd.fit.cvut.cz/www/prj/Benchmarks/ISCAS.7z"
 
-    def get_dataset(self, overwrite: bool = False) -> None:
+    def get_dataset(self, _overwrite: bool = False, timeout: int = 30) -> None:
         temp_dir = TemporaryDirectory()
         temp_dir_fp = Path(temp_dir.name)
         temp_file_fp = temp_dir_fp / "iscas.7z"
         with (
-            requests.get(self.ISCAS_85_89_URL, stream=True) as r,
+            requests.get(self.ISCAS_85_89_URL, stream=True, timeout=timeout) as r,
             temp_file_fp.open("wb") as f,
         ):
             shutil.copyfileobj(r.raw, f)
 
         filter_pattern = re.compile(r"Verilog/c.*?\.v")
         with py7zr.SevenZipFile(temp_file_fp, "r") as archive:
-            isca85_verilog_files = [
-                n for n in archive.getnames() if filter_pattern.match(n)
-            ]
+            isca85_verilog_files = [n for n in archive.getnames() if filter_pattern.match(n)]
 
             for file_name in isca85_verilog_files:
                 case_name = file_name.split("/")[-1].replace(".v", "")
@@ -491,10 +480,8 @@ class ISCAS85DatasetRetriever(DatasetRetriever):
                 metadata = {}
                 metadata["design_name"] = design_name
                 metadata["dataset_name"] = self.dataset_name
-                metadata["dataset_type"] = self.dataset_type
+                metadata["dataset_tags"] = self.dataset_tags
                 metadata_fp = design_dir / "design.json"
-                # with open(metadata_fp, "w") as f:
-                #     json.dump(metadata, f, indent=4)
                 metadata_fp.write_text(json.dumps(metadata, indent=4))
 
                 source_file_dir = design_dir / "sources"
@@ -508,19 +495,19 @@ class ISCAS85DatasetRetriever(DatasetRetriever):
                 shutil.rmtree(source_file_dir / "Verilog")
 
 
-class ISCAS89DatasetRetriever(DatasetRetriever):
+class ISCAS89DatasetRetriever(DataRetriever):
     dataset_name: str = "iscas89"
-    dataset_type: str = "academic"
+    dataset_tags: ClassVar[list[str]] = ["benchmark"]
 
     ISCAS_85_89_URL = "https://ddd.fit.cvut.cz/www/prj/Benchmarks/ISCAS.7z"
 
-    def get_dataset(self, overwrite: bool = False) -> None:
+    def get_dataset(self, _overwrite: bool = False, timeout: int = 30) -> None:
         temp_dir = TemporaryDirectory()
         temp_dir_fp = Path(temp_dir.name)
         temp_file_fp = temp_dir_fp / "iscas.7z"
 
         with (
-            requests.get(self.ISCAS_85_89_URL, stream=True) as r,
+            requests.get(self.ISCAS_85_89_URL, stream=True, timeout=timeout) as r,
             temp_file_fp.open("wb") as f,
         ):
             shutil.copyfileobj(r.raw, f)
@@ -533,9 +520,7 @@ class ISCAS89DatasetRetriever(DatasetRetriever):
 
         filter_pattern = re.compile(r"Verilog/s.*?\.v")
         with py7zr.SevenZipFile(temp_file_fp, "r") as archive:
-            isca85_verilog_files = [
-                n for n in archive.getnames() if filter_pattern.match(n)
-            ]
+            isca85_verilog_files = [n for n in archive.getnames() if filter_pattern.match(n)]
 
             for file_name in isca85_verilog_files:
                 case_name = file_name.split("/")[-1].replace(".v", "")
@@ -550,7 +535,7 @@ class ISCAS89DatasetRetriever(DatasetRetriever):
                 metadata = {}
                 metadata["design_name"] = design_name
                 metadata["dataset_name"] = self.dataset_name
-                metadata["dataset_type"] = self.dataset_type
+                metadata["dataset_tags"] = self.dataset_tags
                 metadata_fp = design_dir / "design.json"
                 metadata_fp.write_text(json.dumps(metadata, indent=4))
 
@@ -568,13 +553,13 @@ class ISCAS89DatasetRetriever(DatasetRetriever):
                 shutil.copy(temp_dir_fp / "Verilog" / "DFF2.v", source_file_dir)
 
 
-class LGSynth89DatasetRetriever(DatasetRetriever):
+class LGSynth89DatasetRetriever(DataRetriever):
     dataset_name: str = "lgsynth89"
-    dataset_type: str = "academic"
+    dataset_tags: ClassVar[list[str]] = ["benchmark"]
 
     LGSYNTH89_URL = "https://ddd.fit.cvut.cz/www/prj/Benchmarks/LGSynth89.7z"
 
-    def get_dataset(self, overwrite: bool = False) -> None:
+    def get_dataset(self, _overwrite: bool = False) -> None:
         temp_dir = TemporaryDirectory()
         temp_dir_fp = Path(temp_dir.name)
         temp_file_fp = temp_dir_fp / "lgsynth89.7z"
@@ -600,7 +585,7 @@ class LGSynth89DatasetRetriever(DatasetRetriever):
                 metadata = {}
                 metadata["design_name"] = design_name
                 metadata["dataset_name"] = self.dataset_name
-                metadata["dataset_type"] = self.dataset_type
+                metadata["dataset_tags"] = self.dataset_tags
                 metadata_fp = design_dir / "design.json"
                 metadata_fp.write_text(json.dumps(metadata, indent=4))
 
@@ -615,13 +600,13 @@ class LGSynth89DatasetRetriever(DatasetRetriever):
                 shutil.rmtree(source_file_dir / "LGSynth89")
 
 
-class LGSynth91DatasetRetriever(DatasetRetriever):
+class LGSynth91DatasetRetriever(DataRetriever):
     dataset_name: str = "lgsynth91"
-    dataset_type: str = "academic"
+    dataset_tags: ClassVar[list[str]] = ["benchmark"]
 
     LGSYNTH91_URL = "https://ddd.fit.cvut.cz/www/prj/Benchmarks/LGSynth91.7z"
 
-    def get_dataset(self, overwrite: bool = False) -> None:
+    def get_dataset(self, _overwrite: bool = False) -> None:
         temp_dir = TemporaryDirectory()
         temp_dir_fp = Path(temp_dir.name)
         temp_file_fp = temp_dir_fp / "lgsynth89.7z"
@@ -636,9 +621,7 @@ class LGSynth91DatasetRetriever(DatasetRetriever):
             verilog_files = [n for n in archive.getnames() if filter_pattern.match(n)]
 
             for file_name in verilog_files:
-                case_name = (
-                    file_name.split("/")[-1].replace("_orig.v", "").replace(".", "_")
-                )
+                case_name = file_name.split("/")[-1].replace("_orig.v", "").replace(".", "_")
                 design_name = f"lgsynth91__{case_name}"
 
                 design_dir = self.design_dataset.designs_dir / design_name
@@ -649,7 +632,7 @@ class LGSynth91DatasetRetriever(DatasetRetriever):
                 metadata = {}
                 metadata["design_name"] = design_name
                 metadata["dataset_name"] = self.dataset_name
-                metadata["dataset_type"] = self.dataset_type
+                metadata["dataset_tags"] = self.dataset_tags
                 metadata_fp = design_dir / "design.json"
                 metadata_fp.write_text(json.dumps(metadata, indent=4))
 
@@ -674,7 +657,7 @@ def fix_blif_constant_expr(fp: Path) -> None:
 
     matches = RE_BLIF_BROKEN_CONSTANT.finditer(t)
     for match in matches:
-        whole = match.group(0)
+        _whole = match.group(0)
         name_line = match.group(1)
         const = match.group(2)
         name_line = name_line.replace("  ", " ")
@@ -684,7 +667,6 @@ def fix_blif_constant_expr(fp: Path) -> None:
             new_str = name_line + f"{const}"
         if const == "-":
             new_str = " "
-        # new_str.removesuffix("\n")
         const_exprs.append(new_str)
         t = t.replace(match.group(0), "")
 
@@ -723,15 +705,15 @@ def fix_blif_duplicate_model_definition(fp: Path) -> None:
     fp.write_text(t)
 
 
-class IWLS93DatasetRetriever(DatasetRetriever):
+class IWLS93DatasetRetriever(DataRetriever):
     dataset_name: str = "iwls93"
-    dataset_type: str = "academic"
+    dataset_tags: ClassVar[list[str]] = ["benchmark"]
 
     IWLS93_URL = "https://ddd.fit.cvut.cz/www/prj/Benchmarks/IWLS93.7z"
 
-    BLACKLIST = ["diffeq", "elliptic", "frisc", "tseng"]
+    BLACKLIST: ClassVar = ["diffeq", "elliptic", "frisc", "tseng"]
 
-    def get_dataset(self, overwrite: bool = False) -> None:
+    def get_dataset(self, _overwrite: bool = False) -> None:
         yosys_bin = auto_find_bin("yosys")
         if yosys_bin is None:
             raise RuntimeError(
@@ -759,7 +741,7 @@ class IWLS93DatasetRetriever(DatasetRetriever):
                 if base_name in self.BLACKLIST:
                     continue
 
-                design_name = f"iwls93_{base_name}"
+                design_name = f"iwls93__{base_name}"
 
                 design_dir = self.design_dataset.designs_dir / design_name
                 if design_dir.exists():
@@ -769,7 +751,7 @@ class IWLS93DatasetRetriever(DatasetRetriever):
                 metadata = {}
                 metadata["design_name"] = design_name
                 metadata["dataset_name"] = self.dataset_name
-                metadata["dataset_type"] = self.dataset_type
+                metadata["dataset_tags"] = self.dataset_tags
                 metadata_fp = design_dir / "design.json"
                 metadata_fp.write_text(json.dumps(metadata, indent=4))
 
@@ -809,15 +791,13 @@ class IWLS93DatasetRetriever(DatasetRetriever):
 
                 if p.returncode != 0:
                     raise RuntimeError(
-                        f"Yosys failed to convert {new_fp} to Verilog:\n"
-                        f"{p.stdout}\n"
-                        f"{p.stderr}\n",
+                        f"Yosys failed to convert {new_fp} to Verilog:\n{p.stdout}\n{p.stderr}\n",
                     )
 
 
-class I99TDatasetRetriever(DatasetRetriever):
+class I99TDatasetRetriever(DataRetriever):
     dataset_name: str = "i99t"
-    dataset_type: str = "academic"
+    dataset_tags: ClassVar[list[str]] = ["benchmark"]
 
     I99T_URL: str = "https://github.com/cad-polito-it/I99T/archive/refs/tags/v2.tar.gz"
 
@@ -826,7 +806,7 @@ class I99TDatasetRetriever(DatasetRetriever):
         "b30",
     ]
 
-    def get_dataset(self, overwrite: bool = False) -> None:
+    def get_dataset(self, _overwrite: bool = False) -> None:
         # check for yosys
         yosys_bin = auto_find_bin("yosys")
         if yosys_bin is None:
@@ -843,8 +823,7 @@ class I99TDatasetRetriever(DatasetRetriever):
         )
         if p.returncode != 0:
             raise RuntimeError(
-                "Yosys is missing the ghdl module. "
-                "Please install ghdl to be used with yosys.",
+                "Yosys is missing the ghdl module. Please install ghdl to be used with yosys.",
             )
 
         listing = get_listing_from_github(
@@ -853,9 +832,7 @@ class I99TDatasetRetriever(DatasetRetriever):
             "I99T",
             "i99t",
         )
-        paths = [
-            content_file.path for content_file in listing if content_file.type == "dir"
-        ]
+        paths = [content_file.path for content_file in listing if content_file.type == "dir"]
         paths = sorted(paths)
         for path in paths:
             base_name = path.split("/")[-1]
@@ -874,7 +851,7 @@ class I99TDatasetRetriever(DatasetRetriever):
             metadata = {}
             metadata["design_name"] = design_name
             metadata["dataset_name"] = self.dataset_name
-            metadata["dataset_type"] = self.dataset_type
+            metadata["dataset_tags"] = self.dataset_tags
             metadata_fp = design_dir / "design.json"
             metadata_fp.write_text(json.dumps(metadata, indent=4))
 
@@ -911,19 +888,17 @@ class I99TDatasetRetriever(DatasetRetriever):
             )
             if p.returncode != 0:
                 raise RuntimeError(
-                    f"Yosys failed to convert {vhdl_name} to Verilog:\n"
-                    f"{p.stdout}\n"
-                    f"{p.stderr}\n",
+                    f"Yosys failed to convert {vhdl_name} to Verilog:\n{p.stdout}\n{p.stderr}\n",
                 )
 
 
-class AddersCVUTDatasetRetriever(DatasetRetriever):
+class AddersCVUTDatasetRetriever(DataRetriever):
     dataset_name: str = "adders_cvut"
-    dataset_type: str = "academic"
+    dataset_tags: ClassVar[list[str]] = ["benchmark"]
 
     ADDERS_CVUT_URL: str = "https://ddd.fit.cvut.cz/www/prj/Benchmarks/Adders.7z"
 
-    def get_dataset(self, overwrite: bool = False) -> None:
+    def get_dataset(self, _overwrite: bool = False) -> None:
         # check for yosys
         yosys_bin = auto_find_bin("yosys")
         if yosys_bin is None:
@@ -943,16 +918,10 @@ class AddersCVUTDatasetRetriever(DatasetRetriever):
             shutil.copyfileobj(r.raw, f)
 
         with py7zr.SevenZipFile(temp_file_fp, "r") as archive:
-            files = [
-                p
-                for p in archive.getnames()
-                if p.endswith(".blif") and not p.endswith("_col.blif")
-            ]
+            files = [p for p in archive.getnames() if p.endswith(".blif") and not p.endswith("_col.blif")]
 
             for file_name in files:
-                base_name = (
-                    file_name.split("/")[-1].replace(".blif", "").replace("-", "_")
-                )
+                base_name = file_name.split("/")[-1].replace(".blif", "").replace("-", "_")
                 design_name = f"adders_cvut__{base_name}"
 
                 design_dir = self.design_dataset.designs_dir / design_name
@@ -963,7 +932,7 @@ class AddersCVUTDatasetRetriever(DatasetRetriever):
                 metadata = {}
                 metadata["design_name"] = design_name
                 metadata["dataset_name"] = self.dataset_name
-                metadata["dataset_type"] = self.dataset_type
+                metadata["dataset_tags"] = self.dataset_tags
                 metadata_fp = design_dir / "design.json"
                 metadata_fp.write_text(json.dumps(metadata, indent=4))
 
@@ -975,9 +944,6 @@ class AddersCVUTDatasetRetriever(DatasetRetriever):
                 current_fp = source_blif_file_dir / Path(file_name)
                 new_fp = source_blif_file_dir / Path(file_name).name
                 current_fp.rename(new_fp)
-
-                # fix_blif_constant_expr(new_fp)
-                # fix_blif_duplicate_model_definition(new_fp)
 
                 source_file_dir = design_dir / "sources"
                 source_file_dir.mkdir(parents=True, exist_ok=True)
@@ -1002,9 +968,7 @@ class AddersCVUTDatasetRetriever(DatasetRetriever):
 
                 if p.returncode != 0:
                     raise RuntimeError(
-                        f"Yosys failed to convert {new_fp} to Verilog:\n"
-                        f"{p.stdout}\n"
-                        f"{p.stderr}\n",
+                        f"Yosys failed to convert {new_fp} to Verilog:\n{p.stdout}\n{p.stderr}\n",
                     )
 
 
@@ -1091,9 +1055,9 @@ def unroll_cell_array_instances(fp: Path) -> None:
     fp.write_text(t)
 
 
-class VerilogAddersMongrelgemDatasetRetriever(DatasetRetriever):
+class VerilogAddersMongrelgemDatasetRetriever(DataRetriever):
     dataset_name: str = "verilog_adders_mongrelgem"
-    dataset_type: str = "open_source"
+    dataset_tags: ClassVar[list[str]] = ["open_source"]
 
     DATA_URL: str = "https://github.com/mongrelgem/Verilog-Adders"
 
@@ -1106,7 +1070,7 @@ class VerilogAddersMongrelgemDatasetRetriever(DatasetRetriever):
         "Kogge-Stone Adder/KoggeStoneAdder.v",
     ]
 
-    def get_dataset(self, overwrite: bool = False) -> None:
+    def get_dataset(self, _overwrite: bool = False) -> None:
         for design_fp in self.DESIGN_FILES:
             base_name = design_fp.split("/")[-1].replace(".v", "")
             design_name = f"verilog_adders_mongrelgem__{base_name}"
@@ -1118,14 +1082,13 @@ class VerilogAddersMongrelgemDatasetRetriever(DatasetRetriever):
             metadata = {}
             metadata["design_name"] = design_name
             metadata["dataset_name"] = self.dataset_name
-            metadata["dataset_type"] = self.dataset_type
+            metadata["dataset_tags"] = self.dataset_tags
             metadata_fp = design_dir / "design.json"
             metadata_fp.write_text(json.dumps(metadata, indent=4))
 
             source_file_dir = design_dir / "sources"
             source_file_dir.mkdir(parents=True, exist_ok=True)
 
-            print(f"Downloading {design_fp}")
             text = get_file_from_github(
                 self.design_dataset.gh_api,
                 "mongrelgem",
@@ -1136,12 +1099,11 @@ class VerilogAddersMongrelgemDatasetRetriever(DatasetRetriever):
             design_fp_local.write_text(text)
 
             unroll_cell_array_instances(design_fp_local)
-            # exit()
 
 
-class Texas97DatasetRetriever(DatasetRetriever):
+class Texas97DatasetRetriever(DataRetriever):
     dataset_name: str = "texas97"
-    dataset_type: str = "academic"
+    dataset_tags: ClassVar[list[str]] = ["benchmark"]
 
     DATA_URL: str = "https://ptolemy.berkeley.edu/projects/embedded/research/vis/texas97-benchmarks.tar.gz"
 
@@ -1150,14 +1112,14 @@ class Texas97DatasetRetriever(DatasetRetriever):
         raise NotImplementedError
 
 
-class MCNC20DatasetRetriever(DatasetRetriever):
+class MCNC20DatasetRetriever(DataRetriever):
     dataset_name: str = "mcnc20"
-    dataset_type: str = "academic"
+    dataset_tags: ClassVar[list[str]] = ["benchmark"]
 
     DATA_URL: str = "https://ddd.fit.cvut.cz/www/prj/Benchmarks/MCNC.7z"
 
     # TODO: Implement this, requires blif conversion
-    def get_dataset(self, overwrite: bool = False) -> None:
+    def get_dataset(self, _overwrite: bool = False) -> None:
         # check for yosys
         yosys_bin = auto_find_bin("yosys")
         if yosys_bin is None:
@@ -1170,9 +1132,9 @@ class MCNC20DatasetRetriever(DatasetRetriever):
         raise NotImplementedError
 
 
-class DeepBenchVerilogDatasetRetriever(DatasetRetriever):
+class DeepBenchVerilogDatasetRetriever(DataRetriever):
     dataset_name: str = "deepbenchverilog"
-    dataset_type: str = "academic"
+    dataset_tags: ClassVar[list[str]] = ["benchmark"]
 
     DESIGN_PATHS: ClassVar[list[str]] = [
         # inference
@@ -1216,7 +1178,7 @@ class DeepBenchVerilogDatasetRetriever(DatasetRetriever):
         "verilog/training/RNN/Vanilla_2560_32_Core_256_32_256_Reuse_10_1_20",
     ]
 
-    def get_dataset(self, overwrite: bool = False) -> None:
+    def get_dataset(self, _overwrite: bool = False) -> None:
         for gh_path in self.DESIGN_PATHS:
             if "inference/Conv" in gh_path:
                 base_name = gh_path.split("/")[-2:]
@@ -1232,14 +1194,12 @@ class DeepBenchVerilogDatasetRetriever(DatasetRetriever):
             metadata = {}
             metadata["design_name"] = design_name
             metadata["dataset_name"] = self.dataset_name
-            metadata["dataset_type"] = self.dataset_type
+            metadata["dataset_tags"] = self.dataset_tags
             metadata_fp = design_dir / "design.json"
             metadata_fp.write_text(json.dumps(metadata, indent=4))
 
             source_file_dir = design_dir / "sources"
             source_file_dir.mkdir(parents=True, exist_ok=True)
-
-            print(f"Downloading {gh_path}")
 
             # each is a dir with verilog files in it
             listing = get_listing_from_github(

@@ -47,9 +47,7 @@ def extract_design_hierarchy(design_files: list[Path]) -> list[str]:
                 f"stderr:\n{std_err}",
             )
             raise RuntimeError(
-                f"yosys exited with code {p.returncode}.\n"
-                f"stdout:\n{std_out}\n"
-                f"stderr:\n{std_err}",
+                f"yosys exited with code {p.returncode}.\nstdout:\n{std_out}\nstderr:\n{std_err}",
             )
         std_out = p.stdout.decode("utf-8")
 
@@ -60,14 +58,8 @@ def extract_design_hierarchy(design_files: list[Path]) -> list[str]:
 
     modules = ls_output.split("\n")[2:]
     modules = [m.strip() for m in modules]
-    modules = [m for m in modules if m != ""]
+    modules = [m for m in modules if m]
     if len(list(set(modules))) != len(modules):
         raise RuntimeError("Duplicate modules found in the design hierarchy.")
-    # pp(modules)
-
-    # jny_data = json.loads(jny_output)
-    # jny_data_modules = jny_data["modules"]
-    # pp(jny_data_modules)
-    # design_graph = nx.DiGraph()
 
     return modules
