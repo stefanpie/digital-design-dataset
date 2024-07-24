@@ -1121,6 +1121,57 @@ def remove_exdc(fp: Path) -> None:
     fp.write_text(t)
 
 
+RE_LATCH_IMPLICIT_CONTROL = re.compile(r"\.latch\s+(\S+)\s+(\S+)\s+([0,1,2,3])")
+
+
+def find_implicit_latches(fp: Path) -> list[re.Match]:
+    t = fp.read_text()
+    matches = list(RE_LATCH_IMPLICIT_CONTROL.finditer(t))
+    return matches
+
+
+def add_implicit_global_clock(fp: Path) -> None:
+    t = fp.read_text()
+    lines = t.splitlines()
+    lines_striped = [line.strip() for line in lines]
+    matches = find_implicit_latches(fp)
+    models = set()
+    for match in matches:
+        model_line = None
+        for line in t[: match.start()].splitlines()[::-1]:
+            if line.startswith(".model"):
+                model_line = line
+                break
+        if model_line is None:
+            raise ValueError("Could not find model line for latch")
+        model_name = model_line.split(" ")[1]
+        models.add(model_name)
+
+    # for each model, add a global clock
+    for model in models:
+        model_line_idx = lines_striped.index(f".model {model}")
+        # find the next line that starts with .outputs
+        outputs_line_idx = model_line_idx
+        for i in range(model_line_idx + 1, len(lines_striped)):
+            if lines_striped[i].startswith(".") and not lines_striped[i].startswith(".inputs"):
+                outputs_line_idx = i
+                break
+        if outputs_line_idx == model_line_idx:
+            raise ValueError("Could not find .outputs line for latch")
+
+        # insert the global clock
+        lines.insert(outputs_line_idx, ".inputs clk")
+
+    t = "\n".join(lines)
+
+    # for each latch, add the global clock
+    for match in matches:
+        latch_line_new = f".latch {match.group(1)} {match.group(2)} re clk {match.group(3)}"
+        t = t.replace(match.group(0), latch_line_new)
+
+    fp.write_text(t)
+
+
 class MCNC20DatasetRetriever(DataRetriever):
     dataset_name: str = "mcnc20"
     dataset_tags: ClassVar[list[str]] = ["benchmark"]
@@ -1184,12 +1235,18 @@ class MCNC20DatasetRetriever(DataRetriever):
             if name in {"i10", "i2", "i3", "i4", "i5", "i6", "i7"}:
                 self.fix_missing_end(new_fp)
 
+            if find_implicit_latches(new_fp):
+                add_implicit_global_clock(new_fp)
+
             source_file_dir = design_dir / "sources"
             source_file_dir.mkdir(parents=True, exist_ok=True)
 
             yosys_script = f"""
             read_blif -sop {source_blif_file_dir / new_fp}
+            proc
             techmap t:$sop
+            # techmap t:$ff
+            # check
             write_verilog {source_file_dir / name}.v
             """
 
