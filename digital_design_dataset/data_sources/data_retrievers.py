@@ -4,6 +4,7 @@ import json
 import re
 import shutil
 import subprocess
+import tarfile
 import zipfile
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -48,6 +49,31 @@ def get_file_from_github(
             )
         return r.content.decode("utf-8")
     return base64.b64decode(content).decode("utf-8")
+
+
+def get_file_from_github_binary(
+    gh_api: Github,
+    owner: str,
+    repo: str,
+    path: str,
+    timeout: int | None = None,
+) -> bytes:
+    repo_ = gh_api.get_repo(f"{owner}/{repo}")
+    data = repo_.get_contents(path)
+    if isinstance(data, list):
+        if len(data) != 1:
+            raise ValueError(f"Expected 1 file, found {len(data)}")
+        data = data[0]
+
+    download_url = data.download_url
+    r = requests.get(download_url, timeout=timeout)
+    # if r.status_code != requests.status_codes.codes.ok:
+    if r.status_code != requests.codes.ok:
+        raise RuntimeError(
+            f"Failed to make request: {r.status_code}\n{r.text}\n{r.headers}",
+        )
+    assert isinstance(r.content, bytes)
+    return r.content
 
 
 def get_file_download_url_from_github(
@@ -1355,3 +1381,43 @@ class DeepBenchVerilogDatasetRetriever(DataRetriever):
                 )
                 design_fp = source_file_dir / file.name
                 design_fp.write_text(text)
+
+
+class RegexFsmVerilogDatasetRetriever(DataRetriever):
+    dataset_name: str = "regex_fsm_verilog"
+    dataset_tags: ClassVar[list[str]] = ["synthetic"]
+
+    def get_dataset(self, _overwrite: bool = False) -> None:
+        archive_bytes = get_file_from_github_binary(
+            self.design_dataset.gh_api,
+            "stefanpie",
+            "regex-fsm-verilog",
+            "generated_designs.tar.gz",
+        )
+        archive = tarfile.open(fileobj=io.BytesIO(archive_bytes))
+        design_dirs = [p.split("/")[1] for p in archive.getnames() if p.count("/") == 1]
+        for design_dir in design_dirs:
+            design_name = f"regex_fsm_verilog__{design_dir}"
+
+            design_dir_fp = self.design_dataset.designs_dir / design_name
+            if design_dir_fp.exists():
+                shutil.rmtree(design_dir_fp)
+            design_dir_fp.mkdir(parents=True, exist_ok=True)
+
+            metadata = {}
+            metadata["design_name"] = design_name
+            metadata["dataset_name"] = self.dataset_name
+            metadata["dataset_tags"] = self.dataset_tags
+            metadata_fp = design_dir_fp / "design.json"
+
+            metadata_fp.write_text(json.dumps(metadata, indent=4))
+
+            source_file_dir = design_dir_fp / "sources"
+            source_file_dir.mkdir(parents=True, exist_ok=True)
+
+            v_str_io = archive.extractfile(f"generated_designs/{design_dir}/fsm.v")
+            assert v_str_io is not None
+            v_str = v_str_io.read().decode()
+
+            design_fp = source_file_dir / "fsm.v"
+            design_fp.write_text(v_str)

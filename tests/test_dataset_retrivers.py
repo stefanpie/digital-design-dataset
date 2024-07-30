@@ -31,6 +31,7 @@ from digital_design_dataset.data_sources.data_retrievers import (
     MCNC20DatasetRetriever,
     OPDBDatasetRetriever,
     OpencoresDatasetRetriever,
+    RegexFsmVerilogDatasetRetriever,
     VerilogAddersMongrelgemDatasetRetriever,
     VTRDatasetRetriever,
 )
@@ -298,3 +299,12 @@ def test_polybench_retriever() -> None:
 
 def test_polybench_validate() -> None:
     auto_validate(d, PolybenchRetriever, n_jobs=n_jobs)
+
+
+### RegexFsmVerilogDatasetRetriever ###
+def test_regex_fsm_retriever() -> None:
+    auto_retriever(d, RegexFsmVerilogDatasetRetriever)
+
+
+def test_regex_fsm_validate() -> None:
+    auto_validate(d, RegexFsmVerilogDatasetRetriever, n_jobs=n_jobs)
