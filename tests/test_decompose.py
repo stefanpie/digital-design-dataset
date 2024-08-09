@@ -2,6 +2,7 @@ import operator
 from pathlib import Path
 from pprint import pp
 
+import networkx as nx
 from dotenv import dotenv_values
 
 from digital_design_dataset.data_sources.data_retrievers import OpencoresDatasetRetriever
@@ -12,6 +13,8 @@ from digital_design_dataset.design_dataset import (
     DesignDataset,
 )
 from digital_design_dataset.flows.decompose import (
+    compute_hierarchy_structured,
+    compute_hierarchy_text,
     decompose_design_structured,
     decompose_design_text,
 )
@@ -72,6 +75,37 @@ def test_decompose_text() -> None:
         source_files = sorted(d.rglob("**/*.v"))
         data_decomposed = decompose_design_text(source_files)
         assert data_decomposed
+
+
+def test_compute_hierarchy_structured() -> None:
+    for d in TEST_DESIGNS_SIMPLE:
+        print(f"Computing hierarchy for {d.name} using structured approach")
+        source_files = sorted(d.rglob("**/*.v"))
+        g_hierarchy = compute_hierarchy_structured(source_files)
+        assert g_hierarchy
+
+
+def test_compute_hierarchy_text() -> None:
+    for d in TEST_DESIGNS_SIMPLE:
+        print(f"Computing hierarchy for {d.name} using text approach")
+        source_files = sorted(d.rglob("**/*.v"))
+        g_hierarchy = compute_hierarchy_text(source_files)
+        assert g_hierarchy
+
+
+def test_compute_hierarchy_agree() -> None:
+    for d in TEST_DESIGNS_SIMPLE:
+        source_files = sorted(d.rglob("**/*.v"))
+        print(f"Computing hierarchy for {d.name} using structured approach")
+        g_hierarchy_structured = compute_hierarchy_structured(source_files)
+        print(f"Computing hierarchy for {d.name} using text approach")
+        g_hierarchy_text = compute_hierarchy_text(source_files)
+        print("Checking hierarchy is equal for both approaches")
+        assert nx.is_isomorphic(
+            g_hierarchy_structured,
+            g_hierarchy_text,
+            node_match=operator.eq,
+        )
 
 
 db_path = test_path / "db"
@@ -156,55 +190,115 @@ def test_decompose_text__opencores() -> None:
         assert data_decomposed
 
 
-edge_case_designs_structured = [
-    "opencores__yadmc",
-]
-
-
-def test_decompose_structured__edge_cases() -> None:
+def test_compute_hierarchy_structured__opencores() -> None:
     designs = get_opencores_designs()
-
-    designs = sorted(
-        filter(lambda d: d["design_name"] in edge_case_designs_structured, designs),
-        key=operator.itemgetter("design_name"),
-    )
-
-    for design in designs:
+    designs = rank_designs_by_size(d, designs)
+    num_designs = len(designs)
+    for i, design in enumerate(designs):
         design_name = design["design_name"]
         design_dir = d.designs_dir / design_name
         sources_dir = design_dir / "sources"
         sources_fps = [f for f in sources_dir.iterdir() if f.is_file()]
         verilog_sources_fps = [f for f in sources_fps if f.suffix in VERILOG_SOURCE_EXTENSIONS_SET]
-
-        print(f"Decomposing {design_name} using structured approach")
-        data_decomposed = decompose_design_structured(verilog_sources_fps)
-        print(len(data_decomposed))
-        assert data_decomposed
-
-
-edge_case_designs_text = [
-    "opencores__cavlc",
-]
+        print(
+            f"{i + 1}/{num_designs} Computing hierarchy for {design_name} using text approach",
+        )
+        g_hierarchy = compute_hierarchy_structured(verilog_sources_fps)
+        assert g_hierarchy
 
 
-def test_decompose_text__edge_cases() -> None:
+def test_compute_hierarchy_text__opencores() -> None:
     designs = get_opencores_designs()
-
-    designs = sorted(
-        filter(lambda d: d["design_name"] in edge_case_designs_text, designs),
-        key=operator.itemgetter("design_name"),
-    )
-
-    pp(designs)
-
-    for design in designs:
+    designs = rank_designs_by_size(d, designs)
+    num_designs = len(designs)
+    for i, design in enumerate(designs):
         design_name = design["design_name"]
         design_dir = d.designs_dir / design_name
         sources_dir = design_dir / "sources"
         sources_fps = [f for f in sources_dir.iterdir() if f.is_file()]
         verilog_sources_fps = [f for f in sources_fps if f.suffix in VERILOG_SOURCE_EXTENSIONS_SET]
+        print(
+            f"{i + 1}/{num_designs} Computing hierarchy for {design_name} using text approach",
+        )
+        g_hierarchy = compute_hierarchy_structured(verilog_sources_fps)
+        assert g_hierarchy
 
-        print(f"Decomposing {design_name} using text approach")
-        data_decomposed = decompose_design_text(verilog_sources_fps)
-        print(len(data_decomposed))
-        assert data_decomposed
+
+def test_compute_hierarchy_agree__opencores() -> None:
+    designs = get_opencores_designs()
+    designs = rank_designs_by_size(d, designs)
+    num_designs = len(designs)
+    for i, design in enumerate(designs):
+        design_name = design["design_name"]
+        design_dir = d.designs_dir / design_name
+        sources_dir = design_dir / "sources"
+        sources_fps = [f for f in sources_dir.iterdir() if f.is_file()]
+        verilog_sources_fps = [f for f in sources_fps if f.suffix in VERILOG_SOURCE_EXTENSIONS_SET]
+        print(
+            f"{i + 1}/{num_designs} Computing hierarchy for {design_name} using structured approach",
+        )
+        g_hierarchy_structured = compute_hierarchy_structured(verilog_sources_fps)
+        print(
+            f"{i + 1}/{num_designs} Computing hierarchy for {design_name} using text approach",
+        )
+        g_hierarchy_text = compute_hierarchy_text(verilog_sources_fps)
+        print(f"{i + 1}/{num_designs} Checking hierarchy is equal for both approaches")
+        assert nx.is_isomorphic(
+            g_hierarchy_structured,
+            g_hierarchy_text,
+            node_match=operator.eq,
+        )
+
+
+# edge_case_designs_structured = [
+#     "opencores__yadmc",
+# ]
+
+
+# def test_decompose_structured__edge_cases() -> None:
+#     designs = get_opencores_designs()
+
+#     designs = sorted(
+#         filter(lambda d: d["design_name"] in edge_case_designs_structured, designs),
+#         key=operator.itemgetter("design_name"),
+#     )
+
+#     for design in designs:
+#         design_name = design["design_name"]
+#         design_dir = d.designs_dir / design_name
+#         sources_dir = design_dir / "sources"
+#         sources_fps = [f for f in sources_dir.iterdir() if f.is_file()]
+#         verilog_sources_fps = [f for f in sources_fps if f.suffix in VERILOG_SOURCE_EXTENSIONS_SET]
+
+#         print(f"Decomposing {design_name} using structured approach")
+#         data_decomposed = decompose_design_structured(verilog_sources_fps)
+#         print(len(data_decomposed))
+#         assert data_decomposed
+
+
+# edge_case_designs_text = [
+#     "opencores__cavlc",
+# ]
+
+
+# def test_decompose_text__edge_cases() -> None:
+#     designs = get_opencores_designs()
+
+#     designs = sorted(
+#         filter(lambda d: d["design_name"] in edge_case_designs_text, designs),
+#         key=operator.itemgetter("design_name"),
+#     )
+
+#     pp(designs)
+
+#     for design in designs:
+#         design_name = design["design_name"]
+#         design_dir = d.designs_dir / design_name
+#         sources_dir = design_dir / "sources"
+#         sources_fps = [f for f in sources_dir.iterdir() if f.is_file()]
+#         verilog_sources_fps = [f for f in sources_fps if f.suffix in VERILOG_SOURCE_EXTENSIONS_SET]
+
+#         print(f"Decomposing {design_name} using text approach")
+#         data_decomposed = decompose_design_text(verilog_sources_fps)
+#         print(len(data_decomposed))
+#         assert data_decomposed

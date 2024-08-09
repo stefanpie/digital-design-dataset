@@ -1,4 +1,5 @@
 import json
+import operator
 import re
 import shutil
 import subprocess
@@ -34,9 +35,7 @@ def run_yosys_for_data(source_files: list[Path]) -> dict:
 
     if p.returncode != 0:
         raise RuntimeError(
-            f"yosys failed with return code {p.returncode}\n"
-            f"STDOUT: {p.stdout}\n"
-            f"STDERR: {p.stderr}",
+            f"yosys failed with return code {p.returncode}\nSTDOUT: {p.stdout}\nSTDERR: {p.stderr}",
         )
 
     data_yosys = json.load(json_data_file)
@@ -81,9 +80,7 @@ def run_yosys_for_sub_design(
 
     if p.returncode != 0:
         raise RuntimeError(
-            f"yosys failed with return code {p.returncode}\n"
-            f"STDOUT: {p.stdout}\n"
-            f"STDERR: {p.stderr}",
+            f"yosys failed with return code {p.returncode}\nSTDOUT: {p.stdout}\nSTDERR: {p.stderr}",
         )
 
     source = Path(output_verilog_file.name).read_text()
@@ -145,13 +142,9 @@ def extract_design_dag(data_yosys: dict) -> nx.DiGraph:
             module_regular_names.append(name)
         if "hdlname" in data_yosys["modules"][name]["attributes"]:
             module_para_names.append(name)
-            module_para_to_reg_map[name] = data_yosys["modules"][name]["attributes"][
-                "hdlname"
-            ]
+            module_para_to_reg_map[name] = data_yosys["modules"][name]["attributes"]["hdlname"]
 
-    final_module_names = set(module_regular_names) | {
-        module_para_to_reg_map[n] for n in module_para_names
-    }
+    final_module_names = set(module_regular_names) | {module_para_to_reg_map[n] for n in module_para_names}
 
     final_module_data = {n: {} for n in final_module_names}
 
@@ -160,14 +153,10 @@ def extract_design_dag(data_yosys: dict) -> nx.DiGraph:
 
     for module_name in data_yosys["modules"].keys():
         module_cells = data_yosys["modules"][module_name]["cells"]
-        module_cells = {
-            k: v for k, v in module_cells.items() if v["type"] in data_yosys["modules"]
-        }
+        module_cells = {k: v for k, v in module_cells.items() if v["type"] in data_yosys["modules"]}
         module_cells_type = [v["type"] for v in module_cells.values()]
         module_cell_types = set(module_cells_type)
-        module_cell_types_mapped = {
-            module_para_to_reg_map.get(t, t) for t in module_cell_types
-        }
+        module_cell_types_mapped = {module_para_to_reg_map.get(t, t) for t in module_cell_types}
 
         if module_name in final_module_names:
             entry_name = module_name
@@ -219,9 +208,7 @@ def extract_unique_subgraphs(
 
 
 def find_top_node(sub_design: nx.DiGraph) -> str:
-    nodes_with_no_in_edges = [
-        node for node in sub_design.nodes if sub_design.in_degree(node) == 0
-    ]
+    nodes_with_no_in_edges = [node for node in sub_design.nodes if sub_design.in_degree(node) == 0]
     if len(nodes_with_no_in_edges) != 1:
         raise ValueError(
             "Sub-design does not have a unique root node",
@@ -277,13 +264,18 @@ def simple_synth_check_yosys(
 
     if p.returncode != 0:
         print(
-            f"yosys failed with return code {p.returncode}\n"
-            f"STDOUT: {p.stdout}\n"
-            f"STDERR: {p.stderr}",
+            f"yosys failed with return code {p.returncode}\nSTDOUT: {p.stdout}\nSTDERR: {p.stderr}",
         )
         return False
 
     return True
+
+
+def compute_hierarchy_structured(source_files: list[Path]) -> nx.DiGraph:
+    data_yosys = run_yosys_for_data(source_files)
+    g = extract_design_dag(data_yosys)
+
+    return g
 
 
 def decompose_design_structured(source_files: list[Path]) -> dict[str, dict[str, str]]:
@@ -379,14 +371,115 @@ def yosys_read_module(module_str: str) -> dict:
 
     if p.returncode != 0:
         raise RuntimeError(
-            f"yosys failed with return code {p.returncode}\n"
-            f"STDOUT: {p.stdout}\n"
-            f"STDERR: {p.stderr}",
+            f"yosys failed with return code {p.returncode}\nSTDOUT: {p.stdout}\nSTDERR: {p.stderr}",
         )
 
     data_yosys = json.load(output_file)
 
     return data_yosys
+
+
+def compute_hierarchy_text(source_files: list[Path]) -> nx.DiGraph:
+    data_yosys = run_yosys_for_data(source_files)
+
+    if len(data_yosys["modules"]) == 0:
+        raise ValueError("No modules found in Yosys data")
+
+    module_regular_names = []
+    module_para_names = []
+    module_para_to_reg_map: dict[str, str] = {}
+
+    for name in data_yosys["modules"]:
+        if "hdlname" not in data_yosys["modules"][name]["attributes"]:
+            module_regular_names.append(name)
+        if "hdlname" in data_yosys["modules"][name]["attributes"]:
+            module_para_names.append(name)
+            module_para_to_reg_map[name] = data_yosys["modules"][name]["attributes"]["hdlname"]
+
+    final_module_names = set(module_regular_names) | {module_para_to_reg_map[n] for n in module_para_names}
+
+    final_module_data = {n: {} for n in final_module_names}
+
+    for module_name in final_module_names:
+        found_count = 0
+        for source_file in source_files:
+            source = source_file.read_text()
+            re_str = r"module\s+?" + module_name + r"(?:\s|\(|#|;)(.|\s)*?endmodule"
+            module_match = re.search(re_str, source, re.MULTILINE)
+            if module_match is not None:
+                # check to make sure line with keyword matched to "module" is not
+                # a single line comment right before an instance of the module
+                # would look like this:
+                # ---
+                # // blah blah blah module
+                # my_module my_module_inst (...
+                # ---
+                # we want to skip this match
+                start_line_number = source.count("\n", 0, module_match.start()) + 1
+                start_line = source.splitlines()[start_line_number - 1]
+                start_line_strip = start_line.strip()
+                if start_line_strip.startswith("//"):
+                    continue
+
+                # also handle case where the comment does not start
+                # at the beginning of the line
+                if "//" in start_line_strip:  # simple check before expensive regex check
+                    comment_match = re.search(
+                        r"((\/[*])([\s\S]+)([*]\/))|([/]{2,}[^\n]+)",
+                        start_line,
+                    )
+                    # assert comment_match is not None
+                    if comment_match is None:
+                        raise ValueError(
+                            "Comment regex match failed even if // in line",
+                        )
+                    # find the location of the start of the match
+                    comment_start = start_line.find(comment_match.group())
+                    # if the comment starts before the module keyword, skip this match
+                    if comment_start < start_line.find("module"):
+                        continue
+
+                final_module_data[module_name]["source"] = module_match.group()
+                final_module_data[module_name]["source_file"] = source_file
+                found_count += 1
+        if found_count != 1:
+            raise ValueError(
+                f"Module {module_name} not found in exactly one source file",
+            )
+
+    for module_name in final_module_names:
+        final_module_data[module_name]["submodules"] = set()
+
+    for module_name in data_yosys["modules"].keys():
+        module_cells = data_yosys["modules"][module_name]["cells"]
+        module_cells = {k: v for k, v in module_cells.items() if v["type"] in data_yosys["modules"]}
+        module_cells_type = [v["type"] for v in module_cells.values()]
+        module_cell_types = set(module_cells_type)
+        module_cell_types_mapped = {module_para_to_reg_map.get(t, t) for t in module_cell_types}
+
+        if module_name in final_module_names:
+            entry_name = module_name
+        else:
+            entry_name = module_para_to_reg_map[module_name]
+
+        final_module_data[entry_name]["submodules"] |= module_cell_types_mapped
+
+        final_module_data[entry_name]["module_name"] = entry_name
+
+    g = nx.DiGraph()
+    nodes_added = set()
+    for module_data in final_module_data.values():
+        g.add_node(module_data["module_name"], module_name=module_data["module_name"])
+        nodes_added.add(module_data["module_name"])
+
+    for module_data in final_module_data.values():
+        for submodule in module_data["submodules"]:
+            g.add_edge(module_data["module_name"], submodule)
+
+    if not nx.is_directed_acyclic_graph(g):
+        raise RuntimeError("Design hierarchy is not a DAG")
+
+    return g
 
 
 def decompose_design_text(
@@ -444,15 +537,8 @@ def decompose_design_text(
 
     data_yosys = run_yosys_for_data(source_files)
 
-    # pp(data_yosys)
-    # /tmp/tmpmqq_4c0c.json
-    # json_data_file = tempfile.NamedTemporaryFile(suffix=".json", delete=False)
-    # Path(json_data_file.name).write_text(json.dumps(data_yosys, indent=4))
-    # pp(json_data_file.name)
-
     if len(data_yosys["modules"]) == 0:
         raise ValueError("No modules found in Yosys data")
-    # module_names = list(set(data_yosys["modules"].keys()))
 
     module_regular_names = []
     module_para_names = []
@@ -463,13 +549,9 @@ def decompose_design_text(
             module_regular_names.append(name)
         if "hdlname" in data_yosys["modules"][name]["attributes"]:
             module_para_names.append(name)
-            module_para_to_reg_map[name] = data_yosys["modules"][name]["attributes"][
-                "hdlname"
-            ]
+            module_para_to_reg_map[name] = data_yosys["modules"][name]["attributes"]["hdlname"]
 
-    final_module_names = set(module_regular_names) | {
-        module_para_to_reg_map[n] for n in module_para_names
-    }
+    final_module_names = set(module_regular_names) | {module_para_to_reg_map[n] for n in module_para_names}
 
     final_module_data = {n: {} for n in final_module_names}
 
@@ -496,9 +578,7 @@ def decompose_design_text(
 
                 # also handle case where the comment does not start
                 # at the beginning of the line
-                if (
-                    "//" in start_line_strip
-                ):  # simple check before expensive regex check
+                if "//" in start_line_strip:  # simple check before expensive regex check
                     comment_match = re.search(
                         r"((\/[*])([\s\S]+)([*]\/))|([/]{2,}[^\n]+)",
                         start_line,
@@ -527,14 +607,10 @@ def decompose_design_text(
 
     for module_name in data_yosys["modules"].keys():
         module_cells = data_yosys["modules"][module_name]["cells"]
-        module_cells = {
-            k: v for k, v in module_cells.items() if v["type"] in data_yosys["modules"]
-        }
+        module_cells = {k: v for k, v in module_cells.items() if v["type"] in data_yosys["modules"]}
         module_cells_type = [v["type"] for v in module_cells.values()]
         module_cell_types = set(module_cells_type)
-        module_cell_types_mapped = {
-            module_para_to_reg_map.get(t, t) for t in module_cell_types
-        }
+        module_cell_types_mapped = {module_para_to_reg_map.get(t, t) for t in module_cell_types}
 
         if module_name in final_module_names:
             entry_name = module_name
@@ -544,9 +620,6 @@ def decompose_design_text(
         final_module_data[entry_name]["submodules"] |= module_cell_types_mapped
 
         final_module_data[entry_name]["module_name"] = entry_name
-
-    # pp({k: v["submodules"] for k, v in final_module_data.items()})
-    # exit()
 
     g = nx.DiGraph()
     nodes_added = set()
@@ -606,3 +679,21 @@ def decompose_design_text(
             raise RuntimeError("Sub-design is not synthesizable")
 
     return sub_design_sources
+
+
+def compute_hierarchy_redundent(source_files: list[Path]) -> nx.DiGraph:
+    g_structured = compute_hierarchy_structured(source_files)
+    g_text = compute_hierarchy_text(source_files)
+    if not nx.is_isomorphic(g_structured, g_text, node_match=operator.eq):
+        raise RuntimeError("Structured and text hierarchies are not isomorphic or don't have the same node properties")
+    return g_structured
+
+
+def get_top_nodes(g: nx.DiGraph) -> list[str]:
+    top_nodes = [node for node in g.nodes if g.in_degree(node) == 0]
+    return sorted(top_nodes)
+
+
+def compute_top_modules(source_files: list[Path]) -> list[str]:
+    g = compute_hierarchy_redundent(source_files)
+    return get_top_nodes(g)
