@@ -3,17 +3,20 @@ import logging
 import re
 import shutil
 import subprocess
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar
 
 import jinja2
+import psutil
 import tqdm
 from joblib import Parallel, delayed
+from pydantic import BaseModel, Field
 
 from digital_design_dataset.design_dataset import VERILOG_SOURCE_EXTENSIONS_SET, DesignDataset
 from digital_design_dataset.flows.decompose import compute_top_modules
-from digital_design_dataset.flows.flow_tools import check_process_output, get_bin
+from digital_design_dataset.flows.flow_tools import MeasureTime, check_process_output, get_bin
 from digital_design_dataset.flows.flows import Flow
 from digital_design_dataset.logger import build_logger
 
@@ -23,8 +26,7 @@ def tcl_quote(string: str) -> str:
     return escaped
 
 
-@dataclass
-class AlteraQuartusBins:
+class ToolBinsAlteraQuartus(BaseModel):
     quartus_sh: Path
     quartus_map: Path
     quartus_fit: Path
@@ -32,7 +34,7 @@ class AlteraQuartusBins:
     quartus_sta: Path
 
     @classmethod
-    def auto_find_bins(cls) -> "AlteraQuartusBins":
+    def auto_find_bins(cls) -> "ToolBinsAlteraQuartus":
         return cls(
             quartus_sh=get_bin("quartus_sh"),
             quartus_map=get_bin("quartus_map"),
@@ -46,20 +48,18 @@ class AlteraQuartusBins:
         return get_bin("quartus_sh")
 
 
-@dataclass
-class AlteraQuartusFlowSettings:
-    additional_settings: list[str] = field(default_factory=list)
-    additional_constraints: list[str] = field(default_factory=list)
-    quartus_sh_opts: list[str] = field(default_factory=list)
-    quartus_map_opts: list[str] = field(default_factory=list)
-    quartus_fit_opts: list[str] = field(default_factory=list)
-    quartus_asm_opts: list[str] = field(default_factory=list)
-    quartus_sta_opts: list[str] = field(default_factory=list)
+class FlowSettingsAlteraQuartus(BaseModel):
+    additional_settings: list[str] = Field(default_factory=list)
+    additional_constraints: list[str] = Field(default_factory=list)
+    quartus_sh_opts: list[str] = Field(default_factory=list)
+    quartus_map_opts: list[str] = Field(default_factory=list)
+    quartus_fit_opts: list[str] = Field(default_factory=list)
+    quartus_asm_opts: list[str] = Field(default_factory=list)
+    quartus_sta_opts: list[str] = Field(default_factory=list)
     n_cores: int = 1
 
 
-@dataclass
-class AlteraPart:
+class PartAltera(BaseModel):
     device: str
     family: str = ""
     package: str = ""
@@ -85,9 +85,9 @@ class AlteraQuartusFlow(Flow):
     def __init__(
         self,
         design_dataset: DesignDataset,
-        part: AlteraPart,
-        tool_bins: AlteraQuartusBins,
-        tool_settings: AlteraQuartusFlowSettings,
+        part: PartAltera,
+        tool_bins: ToolBinsAlteraQuartus,
+        tool_settings: FlowSettingsAlteraQuartus,
     ) -> None:
         super().__init__(design_dataset)
         self.part = part
@@ -95,8 +95,8 @@ class AlteraQuartusFlow(Flow):
         self.tool_settings = tool_settings
 
     @staticmethod
-    def check_supported_part(part: AlteraPart) -> None:
-        supported_devices = get_supported_devices_raw(AlteraQuartusBins.auto_find_quartus_sh())
+    def check_supported_part(part: PartAltera) -> None:
+        supported_devices = get_supported_devices_raw(ToolBinsAlteraQuartus.auto_find_quartus_sh())
         if part.device not in supported_devices:
             raise ValueError(
                 f"The specified device {part.device} is not supported by the specified Quartus installation",
@@ -132,9 +132,13 @@ class AlteraQuartusFlow(Flow):
         source_files_fps = [f for f in hdl_dir.iterdir() if f.is_file()]
         hdl_files = [f for f in source_files_fps if f.suffix in VERILOG_SOURCE_EXTENSIONS_SET]
 
+        design_name = design["design_name"]
+
         top_modules = compute_top_modules(hdl_files)
         if len(top_modules) != 1:
-            raise ValueError(f"Expected exactly one top module, got {len(top_modules)}")
+            raise ValueError(
+                f"Expected exactly one top module for design {design_name}, got {len(top_modules)} top modules: {top_modules}",
+            )
         top_module = top_modules[0]
 
         project_setup_script = jinja2.Template(
@@ -187,8 +191,21 @@ class AlteraQuartusFlow(Flow):
             "-t",
             str(project_setup_script_fp),
         ]
-        p__quartus_sh = subprocess.run(p_args__quartus_sh, capture_output=True, text=True, check=False, cwd=flow_dir)
+        with MeasureTime() as mt:
+            p__quartus_sh = subprocess.run(
+                p_args__quartus_sh,
+                capture_output=True,
+                text=True,
+                check=False,
+                cwd=flow_dir,
+            )
         check_process_output(p__quartus_sh)
+        stage_data = {
+            "stage": "quartus_sh",
+            "duration": mt.elapsed_time,
+            "stdout": p__quartus_sh.stdout,
+            "stderr": p__quartus_sh.stderr,
+        }
 
         # quartus_map
         logger.info("Running quartus_map")

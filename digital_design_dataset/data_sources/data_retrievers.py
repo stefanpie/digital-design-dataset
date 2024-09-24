@@ -135,7 +135,7 @@ class OpencoresDatasetRetriever(DataRetriever):
             self.design_dataset.gh_api,
             "stefanpie",
             "hardware-design-dataset-opencores",
-            "designs.zip",
+            "designs.tar.gz",
         )
 
         r = requests.get(
@@ -146,14 +146,61 @@ class OpencoresDatasetRetriever(DataRetriever):
             raise RuntimeError(
                 f"Failed to make request: {r.status_code}\n{r.text}\n{r.headers}",
             )
-        z = zipfile.ZipFile(io.BytesIO(r.content))
+
+        # z = zipfile.ZipFile(io.BytesIO(r.content))
+        # designs = []
+        # for fn in z.namelist():
+        #     # get only top level folders "designs/*/"
+        #     # folders may be nested, so we need to check if the folder
+        #     # is a top level folder
+        #     if (fn[-1] == "/") and (fn.count("/") == 2):
+        #         designs.append(fn)
+
+        # for fn in designs:
+        #     base_name = fn.split("/")[1]
+        #     if base_name in self.BLACKLIST:
+        #         continue
+        #     design_name = f"opencores__{base_name}"
+        #     design_dir = self.design_dataset.designs_dir / design_name
+        #     if design_dir.exists():
+        #         shutil.rmtree(design_dir)
+        #     design_dir.mkdir(parents=True, exist_ok=True)
+
+        #     metadata = {}
+        #     metadata["design_name"] = design_name
+        #     metadata["dataset_name"] = self.dataset_name
+        #     metadata["dataset_tags"] = self.dataset_tags
+        #     metadata_fp = design_dir / "design.json"
+        #     metadata_fp.write_text(json.dumps(metadata, indent=4))
+
+        #     aux_files_dir = design_dir / "aux_files"
+        #     aux_files_dir.mkdir(parents=True, exist_ok=True)
+
+        #     source_file_dir = design_dir / "sources"
+        #     source_file_dir.mkdir(parents=True, exist_ok=True)
+
+        #     for file in z.namelist():
+        #         if file.startswith(f"designs/{base_name}/") and file[-1] != "/":
+        #             file_name = file.split("/")[-1]
+        #             extension = file_name.split(".")[-1]
+        #             if f".{extension}" in SOURCE_FILES_EXTENSIONS_SET:
+        #                 fp = source_file_dir / file_name
+        #                 fp.write_text(z.read(file).decode("utf-8"))
+        #             else:
+        #                 fp = aux_files_dir / file_name
+        #                 fp.write_text(z.read(file).decode("utf-8"))
+        # z.close()
+
+        # Open the tar.gz file from the content
+        tar = tarfile.open(fileobj=io.BytesIO(r.content), mode="r:gz")
+
         designs = []
-        for fn in z.namelist():
+        for member in tar.getmembers():
             # get only top level folders "designs/*/"
             # folders may be nested, so we need to check if the folder
             # is a top level folder
-            if (fn[-1] == "/") and (fn.count("/") == 2):  # noqa: PLR2004
-                designs.append(fn)
+            if member.isdir() and member.name.count("/") == 1:
+                designs.append(member.name)
 
         for fn in designs:
             base_name = fn.split("/")[1]
@@ -165,10 +212,11 @@ class OpencoresDatasetRetriever(DataRetriever):
                 shutil.rmtree(design_dir)
             design_dir.mkdir(parents=True, exist_ok=True)
 
-            metadata = {}
-            metadata["design_name"] = design_name
-            metadata["dataset_name"] = self.dataset_name
-            metadata["dataset_tags"] = self.dataset_tags
+            metadata = {
+                "design_name": design_name,
+                "dataset_name": self.dataset_name,
+                "dataset_tags": self.dataset_tags,
+            }
             metadata_fp = design_dir / "design.json"
             metadata_fp.write_text(json.dumps(metadata, indent=4))
 
@@ -178,17 +226,26 @@ class OpencoresDatasetRetriever(DataRetriever):
             source_file_dir = design_dir / "sources"
             source_file_dir.mkdir(parents=True, exist_ok=True)
 
-            for file in z.namelist():
-                if file.startswith(f"designs/{base_name}/") and file[-1] != "/":
-                    file_name = file.split("/")[-1]
+            for member in tar.getmembers():
+                if member.isfile() and member.name.startswith(f"designs/{base_name}/"):
+                    file_name = member.name.split("/")[-1]
                     extension = file_name.split(".")[-1]
+                    file_buffer = tar.extractfile(member)
+                    if file_buffer is None:
+                        raise ValueError(f"Failed to extract file {file_name}")
+                    file_content = file_buffer.read().decode("utf-8")
+                    if file_name == "top.txt":
+                        fp = design_dir / "top.txt"
+                        fp.write_text(file_content)
                     if f".{extension}" in SOURCE_FILES_EXTENSIONS_SET:
                         fp = source_file_dir / file_name
-                        fp.write_text(z.read(file).decode("utf-8"))
+                        fp.write_text(file_content)
                     else:
                         fp = aux_files_dir / file_name
-                        fp.write_text(z.read(file).decode("utf-8"))
-        z.close()
+                        fp.write_text(file_content)
+
+        # Close the tar file
+        tar.close()
 
 
 class HW2VecDatasetRetriever(DataRetriever):
@@ -1416,8 +1473,63 @@ class RegexFsmVerilogDatasetRetriever(DataRetriever):
             source_file_dir.mkdir(parents=True, exist_ok=True)
 
             v_str_io = archive.extractfile(f"generated_designs/{design_dir}/fsm.v")
-            assert v_str_io is not None
+            if v_str_io is None:
+                raise ValueError(f"Could not find fsm.v for {design_dir}")
             v_str = v_str_io.read().decode()
 
             design_fp = source_file_dir / "fsm.v"
             design_fp.write_text(v_str)
+
+
+class XACTDatasetRetriever(DataRetriever):
+    dataset_name: str = "xact"
+    dataset_tags: ClassVar[list[str]] = ["benchmark", "reference"]
+
+    def get_dataset(self, _overwrite: bool = False) -> None:
+        archive_bytes = get_file_from_github_binary(
+            self.design_dataset.gh_api,
+            "stefanpie",
+            "xact-designs",
+            "designs_converted.zip",
+        )
+        archive = zipfile.ZipFile(io.BytesIO(archive_bytes))
+
+        design_dirs = {path_str.split("/")[0].strip() for path_str in archive.namelist()}
+
+        design_dirs = sorted(design_dirs)
+
+        for design_dir in design_dirs:
+            design_name = f"xact__{design_dir}"
+
+            design_dir_fp = self.design_dataset.designs_dir / design_name
+            if design_dir_fp.exists():
+                shutil.rmtree(design_dir_fp)
+            design_dir_fp.mkdir(parents=True, exist_ok=True)
+
+            metadata = {}
+            metadata["design_name"] = design_name
+            metadata["dataset_name"] = self.dataset_name
+            metadata["dataset_tags"] = self.dataset_tags
+            metadata_fp = design_dir_fp / "design.json"
+
+            metadata_fp.write_text(json.dumps(metadata, indent=4))
+
+            source_file_dir = design_dir_fp / "sources"
+            source_file_dir.mkdir(parents=True, exist_ok=True)
+
+            verilog_files = [
+                "vlib.v",
+                f"{design_dir}.v",
+            ]
+
+            for verilog_file in verilog_files:
+                v_str_io = archive.open(f"{design_dir}/{verilog_file}")
+                v_str = v_str_io.read().decode()
+
+                design_fp = source_file_dir / verilog_file
+                design_fp.write_text(v_str)
+
+            top_str_io = archive.open(f"{design_dir}/top.txt")
+            top_str = top_str_io.read().decode()
+            top_fp = design_dir_fp / "top.txt"
+            top_fp.write_text(top_str)

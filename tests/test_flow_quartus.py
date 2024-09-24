@@ -13,10 +13,10 @@ from digital_design_dataset.data_sources.data_retrievers import (
 )
 from digital_design_dataset.design_dataset import DesignDataset
 from digital_design_dataset.flows.quartus.flow_quartus import (
-    AlteraPart,
-    AlteraQuartusBins,
     AlteraQuartusFlow,
-    AlteraQuartusFlowSettings,
+    FlowSettingsAlteraQuartus,
+    PartAltera,
+    ToolBinsAlteraQuartus,
     get_supported_devices_raw,
 )
 from digital_design_dataset.logger import build_logger
@@ -89,8 +89,8 @@ devices = [
 ]
 
 
-tool_bins = AlteraQuartusBins.auto_find_bins()
-tool_settings = AlteraQuartusFlowSettings()
+tool_bins = ToolBinsAlteraQuartus.auto_find_bins()
+tool_settings = FlowSettingsAlteraQuartus()
 
 
 def run_single(d: DesignDataset, design: dict[str, str], flow: AlteraQuartusFlow) -> None:
@@ -111,7 +111,7 @@ def test_quartus_flow(device: str, data_retriever: type[DataRetriever]) -> None:
         r.get_dataset()
         designs = d.get_design_metadata_by_dataset_name(dataset_name)
 
-    part = AlteraPart(device=device)
+    part = PartAltera(device=device)
     flow = AlteraQuartusFlow(d, part, tool_bins, tool_settings)
 
     designs = d.get_design_metadata_by_dataset_name(data_retriever.dataset_name)
@@ -131,7 +131,7 @@ def test_quartus_flow(device: str, data_retriever: type[DataRetriever]) -> None:
 
 
 def test_get_supported_parts_raw():
-    parts = get_supported_devices_raw(AlteraQuartusBins.auto_find_quartus_sh())
+    parts = get_supported_devices_raw(ToolBinsAlteraQuartus.auto_find_quartus_sh())
     print(parts)
 
     assert parts

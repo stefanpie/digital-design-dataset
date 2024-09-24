@@ -33,7 +33,13 @@ packages = ["digital_design_dataset"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = ["-s", "-v", "--cov=digital_design_dataset", "--cov-report=html", "--cov-append"] 
+addopts = [
+    "-s",
+    "-v",
+    "--cov=digital_design_dataset",
+    "--cov-report=html",
+    # "--cov-append"
+] 
 log_cli = true
 
 

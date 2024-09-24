@@ -3,6 +3,7 @@ import operator
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from pprint import pp
@@ -223,16 +224,15 @@ def simple_synth_check_yosys(
     extra_data_files: list[Path] | None = None,
 ) -> bool:
     temp_inputs = []
-    # temp_dir = tempfile.TemporaryDirectory()
-    # temp_dir_name = temp_dir.name
-    temp_dir = tempfile.mkdtemp()
-    temp_dir_name = temp_dir
+    temp_dir = tempfile.TemporaryDirectory()
+    temp_dir_name = temp_dir.name
+    # temp_dir = tempfile.mkdtemp()
+    # temp_dir_name = temp_dir
 
     for source_name, source in sources.items():
         temp_input = Path(temp_dir_name) / source_name
         temp_inputs.append(temp_input)
         temp_input.write_text(source)
-        print(temp_input)
 
     # add extra data files
     if extra_data_files is not None:
@@ -352,7 +352,7 @@ def yosys_read_module(module_str: str) -> dict:
     input_file = tempfile.NamedTemporaryFile(suffix=".v")
     output_file = tempfile.NamedTemporaryFile(suffix=".json")
 
-    Path(input_file.name).write_text(module_str)
+    Path(input_file.name).write_text(module_str, encoding="utf-8")
 
     script = f"read_verilog {input_file.name};\n"
     script += "proc;\n"
@@ -697,3 +697,55 @@ def get_top_nodes(g: nx.DiGraph) -> list[str]:
 def compute_top_modules(source_files: list[Path]) -> list[str]:
     g = compute_hierarchy_redundent(source_files)
     return get_top_nodes(g)
+
+
+class AutoTopModule:
+    def __init__(self, g: nx.DiGraph) -> None:
+        self.g = g
+
+    @staticmethod
+    def normalize_scores(scores: dict[str, float]) -> dict[str, float]:
+        total = sum(scores.values())
+        return {k: v / total for k, v in scores.items()}
+
+    @property
+    def scores_huristic(self) -> dict[str, float]:
+        db = {}
+        top_nodes = get_top_nodes(self.g)
+        for node in top_nodes:
+            sub_design = self.g.subgraph(nx.descendants(self.g, node) | {node}).copy()
+            depth = nx.dag_longest_path_length(sub_design)
+            n_nodes = len(sub_design.nodes)
+            n_edges = len(sub_design.edges)
+            db[node] = (depth + 1) * (n_nodes + 1) * (n_edges + 1)
+        return self.normalize_scores(db)
+
+    @property
+    def scores_n_nodes(self) -> dict[str, int]:
+        db = {}
+        top_nodes = get_top_nodes(self.g)
+        for node in top_nodes:
+            sub_design = self.g.subgraph(nx.descendants(self.g, node) | {node}).copy()
+            n_nodes = len(sub_design.nodes)
+            db[node] = n_nodes
+        return db
+
+    @property
+    def scores_n_edges(self) -> dict[str, int]:
+        db = {}
+        top_nodes = get_top_nodes(self.g)
+        for node in top_nodes:
+            sub_design = self.g.subgraph(nx.descendants(self.g, node) | {node}).copy()
+            n_edges = len(sub_design.edges)
+            db[node] = n_edges
+        return db
+
+    @property
+    def scores_depth(self) -> dict[str, int]:
+        db = {}
+        top_nodes = get_top_nodes(self.g)
+        for node in top_nodes:
+            sub_design = self.g.subgraph(nx.descendants(self.g, node) | {node}).copy()
+            depth = nx.dag_longest_path_length(sub_design)
+            db[node] = depth
+        return db

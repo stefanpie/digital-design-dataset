@@ -13,10 +13,14 @@ from digital_design_dataset.design_dataset import (
     DesignDataset,
 )
 from digital_design_dataset.flows.decompose import (
+    AutoTopModule,
+    compute_hierarchy_redundent,
     compute_hierarchy_structured,
     compute_hierarchy_text,
     decompose_design_structured,
     decompose_design_text,
+    get_top_nodes,
+    simple_synth_check_yosys,
 )
 
 DIR_CURRENT = Path(__file__).parent
@@ -108,7 +112,7 @@ def test_compute_hierarchy_agree() -> None:
         )
 
 
-db_path = test_path / "db"
+db_path = test_path / "db_test_decompose"
 d = DesignDataset(
     db_path,
     overwrite=False,
@@ -116,43 +120,28 @@ d = DesignDataset(
 )
 
 
-def rank_designs_by_size(d: DesignDataset, designs: list[dict]) -> list[dict]:
-    sizes = []
-    for design in designs:
-        design_name = design["design_name"]
-        design_dir = d.designs_dir / design_name
-        sources_dir = design_dir / "sources"
-        sources_fps = [f for f in sources_dir.iterdir() if f.is_file()]
-        verilog_sources_fps = [f for f in sources_fps if f.suffix in VERILOG_SOURCE_EXTENSIONS_SET]
-        size = sum(len(f.read_text()) for f in verilog_sources_fps)
-        sizes.append((design, size))
-    # small to large
-    sizes = sorted(sizes, key=operator.itemgetter(1))
-    designs_sorted = [design for design, _ in sizes]
-    return designs_sorted
-
-
-def get_opencores_designs() -> list[dict]:
-    # setup test designs in the dataset
-    db_path = test_path / "db"
-    d = DesignDataset(
-        db_path,
-        overwrite=False,
-        gh_token=gh_token,
-    )
+def get_opencores_designs(overwrite: bool = False) -> list[dict]:
     dataset_name = "opencores"
-    designs = d.get_design_metadata_by_dataset_name(dataset_name)
-    designs = sorted(designs, key=operator.itemgetter("design_name"))
-    if not designs:
+    if overwrite:
+        print(f"Overwriting dataset: {dataset_name}")
+        designs = d.get_design_metadata_by_dataset_name(dataset_name)
+        for design in designs:
+            d.delete_design(design["design_name"])
         OpencoresDatasetRetriever(d).get_dataset()
         designs = d.get_design_metadata_by_dataset_name(dataset_name)
-
+        designs = sorted(designs, key=operator.itemgetter("design_name"))
+    else:
+        designs = d.get_design_metadata_by_dataset_name(dataset_name)
+        designs = sorted(designs, key=operator.itemgetter("design_name"))
+        if not designs:
+            OpencoresDatasetRetriever(d).get_dataset()
+            designs = d.get_design_metadata_by_dataset_name(dataset_name)
+            designs = sorted(designs, key=operator.itemgetter("design_name"))
     return designs
 
 
 def test_decompose_structured__opencores() -> None:
     designs = get_opencores_designs()
-    designs = rank_designs_by_size(d, designs)
     num_designs = len(designs)
     for i, design in enumerate(designs):
         design_name = design["design_name"]
@@ -170,7 +159,6 @@ def test_decompose_structured__opencores() -> None:
 
 def test_decompose_text__opencores() -> None:
     designs = get_opencores_designs()
-    designs = rank_designs_by_size(d, designs)
     num_designs = len(designs)
     for i, design in enumerate(designs):
         design_name = design["design_name"]
@@ -192,7 +180,6 @@ def test_decompose_text__opencores() -> None:
 
 def test_compute_hierarchy_structured__opencores() -> None:
     designs = get_opencores_designs()
-    designs = rank_designs_by_size(d, designs)
     num_designs = len(designs)
     for i, design in enumerate(designs):
         design_name = design["design_name"]
@@ -209,7 +196,6 @@ def test_compute_hierarchy_structured__opencores() -> None:
 
 def test_compute_hierarchy_text__opencores() -> None:
     designs = get_opencores_designs()
-    designs = rank_designs_by_size(d, designs)
     num_designs = len(designs)
     for i, design in enumerate(designs):
         design_name = design["design_name"]
@@ -226,7 +212,6 @@ def test_compute_hierarchy_text__opencores() -> None:
 
 def test_compute_hierarchy_agree__opencores() -> None:
     designs = get_opencores_designs()
-    designs = rank_designs_by_size(d, designs)
     num_designs = len(designs)
     for i, design in enumerate(designs):
         design_name = design["design_name"]
@@ -250,55 +235,63 @@ def test_compute_hierarchy_agree__opencores() -> None:
         )
 
 
-# edge_case_designs_structured = [
-#     "opencores__yadmc",
-# ]
+def test_single_top__opencores():
+    designs = get_opencores_designs(overwrite=True)
+    num_designs = len(designs)
+    for i, design in enumerate(designs):
+        design_name = design["design_name"]
+        design_dir = d.designs_dir / design_name
+        sources_dir = design_dir / "sources"
+        sources_fps = [f for f in sources_dir.iterdir() if f.is_file()]
+        verilog_sources_fps = [f for f in sources_fps if f.suffix in VERILOG_SOURCE_EXTENSIONS_SET]
+        print(
+            f"{i + 1}/{num_designs} Computing hierarchy for {design_name} using text approach",
+        )
 
+        g = compute_hierarchy_redundent(verilog_sources_fps)
+        top_nodes = get_top_nodes(g)
+        auto_top_helper = AutoTopModule(g)
 
-# def test_decompose_structured__edge_cases() -> None:
-#     designs = get_opencores_designs()
+        db = auto_top_helper.scores_huristic
+        db_sorted = sorted(db.items(), key=operator.itemgetter(1), reverse=True)
+        auto_top = max(db.items(), key=operator.itemgetter(1))[1]
 
-#     designs = sorted(
-#         filter(lambda d: d["design_name"] in edge_case_designs_structured, designs),
-#         key=operator.itemgetter("design_name"),
-#     )
+        db_n_nodes = auto_top_helper.scores_n_nodes
 
-#     for design in designs:
-#         design_name = design["design_name"]
-#         design_dir = d.designs_dir / design_name
-#         sources_dir = design_dir / "sources"
-#         sources_fps = [f for f in sources_dir.iterdir() if f.is_file()]
-#         verilog_sources_fps = [f for f in sources_fps if f.suffix in VERILOG_SOURCE_EXTENSIONS_SET]
+        if len(top_nodes) == 1:
+            top_node = top_nodes[0]
+        else:
+            score_diff = abs(db_sorted[0][1] - db_sorted[1][1])
 
-#         print(f"Decomposing {design_name} using structured approach")
-#         data_decomposed = decompose_design_structured(verilog_sources_fps)
-#         print(len(data_decomposed))
-#         assert data_decomposed
+            if score_diff > 0.5:
+                top_node = db_sorted[0][0]
+                print(f"Computed based on differential: {db_sorted=}")
+            elif len(set(db_n_nodes.values())) > 1:
+                top_nodes_filtered = [node for node, score in db_n_nodes.items() if score > 0]
+                print(f"Filtered: {top_nodes_filtered=}")
+                if len(top_nodes_filtered) == 1:
+                    top_node = top_nodes_filtered[0]
+                    print(f"Computed based on singleton filter: {db_n_nodes=}")
+                else:
+                    top_node = None
+            else:
+                top_node = None
 
+        dot_fp = design_dir / "h.dot"
+        dot_fp.write_text(nx.nx_agraph.to_agraph(g).string())
+        print(f"Saved hierarchy to {dot_fp}")
 
-# edge_case_designs_text = [
-#     "opencores__cavlc",
-# ]
+        if top_node is None:
+            print(nx.nx_agraph.to_agraph(g).string())
+            print(f"Top nodes: {top_nodes}")
+            print(f"Top nodes score: {db_sorted=}")
+            print(f"Top nodes n_nodes: {db_n_nodes=}")
+            print(f"Auto top: {auto_top}")
+            raise ValueError(f"Could not find top module for design {design_name}, candidates: {top_nodes}")
 
+        print(f"Top module: {top_node}")
 
-# def test_decompose_text__edge_cases() -> None:
-#     designs = get_opencores_designs()
-
-#     designs = sorted(
-#         filter(lambda d: d["design_name"] in edge_case_designs_text, designs),
-#         key=operator.itemgetter("design_name"),
-#     )
-
-#     pp(designs)
-
-#     for design in designs:
-#         design_name = design["design_name"]
-#         design_dir = d.designs_dir / design_name
-#         sources_dir = design_dir / "sources"
-#         sources_fps = [f for f in sources_dir.iterdir() if f.is_file()]
-#         verilog_sources_fps = [f for f in sources_fps if f.suffix in VERILOG_SOURCE_EXTENSIONS_SET]
-
-#         print(f"Decomposing {design_name} using text approach")
-#         data_decomposed = decompose_design_text(verilog_sources_fps)
-#         print(len(data_decomposed))
-#         assert data_decomposed
+        assert simple_synth_check_yosys(
+            {fp.name: fp.read_text() for fp in verilog_sources_fps},
+            top_node,
+        )

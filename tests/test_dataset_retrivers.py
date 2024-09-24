@@ -34,6 +34,7 @@ from digital_design_dataset.data_sources.data_retrievers import (
     RegexFsmVerilogDatasetRetriever,
     VerilogAddersMongrelgemDatasetRetriever,
     VTRDatasetRetriever,
+    XACTDatasetRetriever,
 )
 from digital_design_dataset.design_dataset import (
     DesignDataset,
@@ -308,3 +309,11 @@ def test_regex_fsm_retriever() -> None:
 
 def test_regex_fsm_validate() -> None:
     auto_validate(d, RegexFsmVerilogDatasetRetriever, n_jobs=n_jobs)
+
+
+def test_xact_retriever() -> None:
+    auto_retriever(d, XACTDatasetRetriever)
+
+
+def test_xact_validate() -> None:
+    auto_validate(d, XACTDatasetRetriever, n_jobs=n_jobs)
