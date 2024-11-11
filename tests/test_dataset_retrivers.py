@@ -20,6 +20,7 @@ from digital_design_dataset.data_sources.data_retrievers import (
     DataRetriever,
     DeepBenchVerilogDatasetRetriever,
     EPFLDatasetRetriever,
+    EspressoPLADatasetRetriever,
     HW2VecDatasetRetriever,
     I99TDatasetRetriever,
     ISCAS85DatasetRetriever,
@@ -311,9 +312,19 @@ def test_regex_fsm_validate() -> None:
     auto_validate(d, RegexFsmVerilogDatasetRetriever, n_jobs=n_jobs)
 
 
+### XACTDatasetRetriever ###
 def test_xact_retriever() -> None:
     auto_retriever(d, XACTDatasetRetriever)
 
 
 def test_xact_validate() -> None:
     auto_validate(d, XACTDatasetRetriever, n_jobs=n_jobs)
+
+
+### EspressoPLADatasetRetriever ###
+def test_espresso_pla_retriever() -> None:
+    auto_retriever(d, EspressoPLADatasetRetriever)
+
+
+def test_espresso_pla_validate() -> None:
+    auto_validate(d, EspressoPLADatasetRetriever, n_jobs=n_jobs)

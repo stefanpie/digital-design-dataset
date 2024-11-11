@@ -1,12 +1,18 @@
+import argparse
 import base64
+import http
 import io
 import json
 import re
 import shutil
 import subprocess
 import tempfile
+import webbrowser
 from collections import defaultdict
+from functools import partial
+from http.server import SimpleHTTPRequestHandler
 from pathlib import Path
+from socketserver import TCPServer
 
 import joblib
 import matplotlib.pyplot as plt
@@ -14,6 +20,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import tiktoken
+import tqdm
 from dotenv import dotenv_values
 from joblib import Parallel, delayed
 from sklearn.decomposition import PCA, TruncatedSVD
@@ -51,8 +58,7 @@ if "DB_PATH" in env_config:
         db_path = Path(db_path_val)
     except ValueError as e:
         raise ValueError(
-            "An error occurred while parsing the DB_PATH "
-            f"string into a Path object:\n{e!s}",
+            f"An error occurred while parsing the DB_PATH string into a Path object:\n{e!s}",
         ) from e
 
 dd = DesignDataset(
@@ -105,9 +111,7 @@ def build_dataset_files(design_dataset: DesignDataset) -> pd.DataFrame:
         dataset_name = design["dataset_name"]
         source_files = design_dataset.get_design_source_files(design_name)
         file_name = [fp.name for fp in source_files]
-        file_path_relative = [
-            str(fp.relative_to(design_dataset.root_dir)) for fp in source_files
-        ]
+        file_path_relative = [str(fp.relative_to(design_dataset.root_dir)) for fp in source_files]
         df_dataset_summary = pd.concat(
             [
                 df_dataset_summary,
@@ -133,18 +137,14 @@ def analyze_design_sources_simple(
 
     print("Counting non-whitespace characters")
     char_counts = Parallel(n_jobs=n_jobs)(
-        delayed(count_non_whitespace_chars)(design_dataset.root_dir / x)
-        for x in df_source_code_analysis["file_path"]
+        delayed(count_non_whitespace_chars)(design_dataset.root_dir / x) for x in df_source_code_analysis["file_path"]
     )
     df_source_code_analysis["num_chars"] = char_counts
 
     print("Counting number of modules")
     module_counts = Parallel(
         n_jobs=n_jobs,
-    )(
-        delayed(count_modules)(design_dataset.root_dir / x)
-        for x in df_source_code_analysis["file_path"]
-    )
+    )(delayed(count_modules)(design_dataset.root_dir / x) for x in df_source_code_analysis["file_path"])
     df_source_code_analysis["num_modules"] = module_counts
 
     return df_source_code_analysis
@@ -174,8 +174,7 @@ def analyze_design_sources_tokenization(
         df_tokenizer = df_dataset_files.copy()
 
         num_tokens = Parallel(n_jobs=n_jobs)(
-            delayed(count_tokens)(design_dataset.root_dir / x, tokenizer_name)
-            for x in df_tokenizer["file_path"]
+            delayed(count_tokens)(design_dataset.root_dir / x, tokenizer_name) for x in df_tokenizer["file_path"]
         )
         df_tokenizer["num_tokens"] = num_tokens
         df_tokenizer["tokenizer"] = tokenizer_name
@@ -183,6 +182,54 @@ def analyze_design_sources_tokenization(
 
     df_tokenizers_combined = pd.concat(df_tokenizers)
     return df_tokenizers_combined
+
+
+def analyze_design_sources_embedding(
+    df_dataset_files: pd.DataFrame,
+) -> dict:
+    files = df_dataset_files["file_path"].to_list()
+    files = [str((dd.root_dir / x).resolve()) for x in files]
+    dataset_names = df_dataset_files["dataset_name"].to_list()
+
+    # create vectorizer
+    vectorizer = TfidfVectorizer(
+        # settings for source code, not english
+        input="filename",
+        lowercase=False,
+        analyzer="char",
+        stop_words=None,
+        ngram_range=(1, 1),
+        max_features=1024,
+    )
+
+    # fit vectorizer
+    print("Fitting vectorizer")
+    X_sparse = vectorizer.fit_transform(tqdm.tqdm(files))
+    X_dense = X_sparse.toarray()
+
+    projection_data = {}
+    projection_data["dataset_names"] = dataset_names
+    projection_data["projections"] = {}
+
+    # PCA
+    print("Running PCA")
+    pca = PCA(n_components=2)
+    X_pca = pca.fit_transform(X_dense)
+    projection_data["projections"]["pca"] = X_pca
+
+    # SVD
+    print("Running SVD")
+    svd = TruncatedSVD(n_components=2)
+    X_svd = svd.fit_transform(X_dense)
+    projection_data["projections"]["svd"] = X_svd
+
+    # TSNE
+    print("Running TSNE")
+    tsne = TSNE(n_components=2)
+    X_tsne = tsne.fit_transform(X_dense)
+    projection_data["projections"]["tsne"] = X_tsne
+
+    return projection_data
 
 
 def data_uri_from_buffer(buf: io.BytesIO, mime_type: str) -> str:
@@ -288,19 +335,11 @@ def build_report(
     report_output_dir: Path,
     df_source_analysis_simple: pd.DataFrame | None = None,
     df_source_analysis_tokenization: pd.DataFrame | None = None,
+    source_analysis_embedding_data: dict | None = None,
 ):
     if report_output_dir.exists():
         shutil.rmtree(report_output_dir)
     report_output_dir.mkdir()
-
-    # report_figs = report_output_dir / "figures"
-    # report_figs.mkdir()
-
-    # report_data = report_output_dir / "data"
-    # report_data.mkdir()
-
-    # report_tables = report_output_dir / "tables"
-    # report_tables.mkdir()
 
     df_sources = (
         df_dataset_summary.groupby("dataset_name")
@@ -315,6 +354,8 @@ def build_report(
         columns=["dataset_name", "num_designs"],
         escape=False,
     )
+
+    designs_total = df_sources["num_designs"].sum()
 
     if df_source_analysis_simple is not None:
         fig_uri_num_chars_hist = build_histogram_plot(
@@ -366,10 +407,8 @@ def build_report(
             log_scale=(True, True),
         )
 
-        df_source_simple_agg_by_design_num_chars_sorted = (
-            df_source_simple_agg_by_design.sort_values(
-                "num_chars",
-            )
+        df_source_simple_agg_by_design_num_chars_sorted = df_source_simple_agg_by_design.sort_values(
+            "num_chars",
         )
         fig_uri_num_chars_by_design_ranked = build_rank_plot(
             df_source_simple_agg_by_design_num_chars_sorted,
@@ -380,10 +419,8 @@ def build_report(
             log_scale=True,
         )
 
-        df_source_simple_agg_by_design_num_modules_sorted = (
-            df_source_simple_agg_by_design.sort_values(
-                "num_modules",
-            )
+        df_source_simple_agg_by_design_num_modules_sorted = df_source_simple_agg_by_design.sort_values(
+            "num_modules",
         )
         fig_uri_num_modules_by_design_ranked = build_rank_plot(
             df_source_simple_agg_by_design_num_modules_sorted,
@@ -407,10 +444,8 @@ def build_report(
             .reset_index()
         )
 
-        df_source_simple_agg_by_dataset_num_chars_sorted = (
-            df_source_simple_agg_by_dataset.sort_values(
-                "num_chars",
-            )
+        df_source_simple_agg_by_dataset_num_chars_sorted = df_source_simple_agg_by_dataset.sort_values(
+            "num_chars",
         )
         fig_uri_num_chars_by_dataset = build_bar_plot(
             df_source_simple_agg_by_dataset_num_chars_sorted,
@@ -422,10 +457,8 @@ def build_report(
             log_scale=True,
         )
 
-        df_source_simple_agg_by_dataset_num_modules_sorted = (
-            df_source_simple_agg_by_dataset.sort_values(
-                "num_modules",
-            )
+        df_source_simple_agg_by_dataset_num_modules_sorted = df_source_simple_agg_by_dataset.sort_values(
+            "num_modules",
         )
         fig_uri_num_modules_by_dataset = build_bar_plot(
             df_source_simple_agg_by_dataset_num_modules_sorted,
@@ -442,15 +475,11 @@ def build_report(
         token_plots = {}
         token_counts = {}
         for tokenizer in tokenizers_unique:
-            df_sub = df_source_analysis_tokenization[
-                df_source_analysis_tokenization["tokenizer"] == tokenizer
-            ]
+            df_sub = df_source_analysis_tokenization[df_source_analysis_tokenization["tokenizer"] == tokenizer]
             total = df_sub["num_tokens"].sum()
             token_counts[tokenizer] = total
 
-            df_agg_by_design = (
-                df_sub.groupby("design_name").agg({"num_tokens": "sum"}).reset_index()
-            )
+            df_agg_by_design = df_sub.groupby("design_name").agg({"num_tokens": "sum"}).reset_index()
             df_agg_by_design_sorted = df_agg_by_design.sort_values("num_tokens")
 
             fig_uri_num_tokens_by_design_ranked = build_rank_plot(
@@ -462,9 +491,7 @@ def build_report(
                 log_scale=True,
             )
 
-            df_agg_by_dataset = (
-                df_sub.groupby("dataset_name").agg({"num_tokens": "sum"}).reset_index()
-            )
+            df_agg_by_dataset = df_sub.groupby("dataset_name").agg({"num_tokens": "sum"}).reset_index()
 
             df_agg_by_dataset_sorted = df_agg_by_dataset.sort_values("num_tokens")
             fig_uri_num_tokens_by_dataset = build_bar_plot(
@@ -482,6 +509,25 @@ def build_report(
                 "fig_uri_num_tokens_by_dataset": fig_uri_num_tokens_by_dataset,
             }
 
+    if source_analysis_embedding_data is not None:
+        figures = {}
+        dataset_sources = source_analysis_embedding_data["dataset_names"]
+
+        colors = sns.color_palette("tab10", n_colors=len(dataset_sources))
+
+        projections = source_analysis_embedding_data["projections"]
+        for projection_name, projection_data in projections.items():
+            fig, ax = plt.subplots(figsize=(8, 8))
+            for i, dataset_name in enumerate(dataset_sources):
+                x, y = projection_data[i]
+                ax.scatter(x, y, label=dataset_name, color=colors[i])
+            ax.set_title(f"{projection_name.upper()}: Source Code Embeddings of Designs")
+            fig.tight_layout()
+            buf = io.BytesIO()
+            fig.savefig(buf, format="png")
+            fig_uri = data_uri_from_buffer(buf, "image/png")
+            figures[projection_name] = fig_uri
+
     html_report = ""
     html_report += "<html>\n"
     html_report += "<head>\n"
@@ -492,9 +538,7 @@ def build_report(
     html_report += "* { box-sizing: border-box; }\n"
     html_report += "body { max-width: 80%; margin-left: auto; margin-right: auto; padding-top: 20px; }\n"
     html_report += "table { border-collapse: collapse; width: 100%; }\n"
-    html_report += (
-        "th, td { border: 1px solid #dddddd; text-align: left; padding: 8px; }\n"
-    )
+    html_report += "th, td { border: 1px solid #dddddd; text-align: left; padding: 8px; }\n"
     html_report += "th { background-color: #f2f2f2; }\n"
     html_report += "img { max-width: 100%; }\n"
     html_report += "</style>\n"
@@ -503,7 +547,16 @@ def build_report(
     html_report += "<body>\n"
     html_report += "<h1>Design Dataset Report</h1>\n"
     html_report += "<h2>Dataset Summary</h2>\n"
+    html_report += "<div style='border: 1px solid #dddddd; padding: 8px; width: 100%; margin-bottom: 16px;'>\n"
+    html_report += (
+        f"<p style='margin: 0; font-size: 20px; text-align: center;'><b>Number of Sources: {len(df_sources)}</b></p>\n"
+    )
+    html_report += (
+        f"<p style='margin: 0; font-size: 20px; text-align: center;'><b>Number of Designs: {designs_total}</b></p>\n"
+    )
+    html_report += "</div>\n"
     html_report += html_table_sources
+
     if df_source_analysis_simple is not None:
         html_report += "<h2>Source Code Analysis - Simple</h2>\n"
         html_report += "<h3>Summary by File</h3>\n"
@@ -530,13 +583,19 @@ def build_report(
         for tokenizer in token_plots:
             html_report += f"<h3>Tokenizer: {tokenizer}</h3>\n"
 
-            html_report += f"<p><b>Total Token Count: {token_counts[tokenizer]:,} aka {token_counts[tokenizer]:.2e}</b></p>\n"
             html_report += (
-                "<div style='display: grid; grid-template-columns: 1fr 1fr;'>\n"
+                f"<p><b>Total Token Count: {token_counts[tokenizer]:,} aka {token_counts[tokenizer]:.2e}</b></p>\n"
             )
+            html_report += "<div style='display: grid; grid-template-columns: 1fr 1fr;'>\n"
             html_report += f'<img src="{token_plots[tokenizer]["fig_uri_num_tokens_by_design_ranked"]}" />\n'
             html_report += f'<img src="{token_plots[tokenizer]["fig_uri_num_tokens_by_dataset"]}" />\n'
             html_report += "</div>\n"
+
+    if source_analysis_embedding_data is not None:
+        html_report += "<h2>Source Code Analysis - TD-IDF Embeddings</h2>\n"
+        for projection_name, fig_uri in figures.items():
+            html_report += f"<h3>{projection_name.upper()} Embeddings</h3>\n"
+            html_report += f'<img src="{fig_uri}" />\n'
 
     html_report += "</body>\n"
     html_report += "</html>\n"
@@ -545,26 +604,97 @@ def build_report(
     html_report_fp.write_text(html_report)
 
 
+class CustomHTTPRequestHandler(SimpleHTTPRequestHandler):
+    def translate_path(self, path):
+        # Always serve the report.html file
+        report_file = Path(self.directory) / "report.html"
+        print(self.directory)
+        return str(report_file.resolve())
+
+    def do_GET(self):
+        self.path = "/report.html"
+        return super().do_GET()
+
+
+class ReportHTTPHandler(CustomHTTPRequestHandler):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def do_GET(self):
+        self.path = "/report.html"
+        return super().do_GET()
+
+
 if __name__ == "__main__":
-    report_dir = current_script_dir / "report"
+    parser = argparse.ArgumentParser(description="Generate a report for a design dataset")
+    parser.add_argument("--analyze_basic", action="store_true", default=False, help="Analyze basic metrics")
+    parser.add_argument(
+        "--analyze_tokenization",
+        action="store_true",
+        default=False,
+        help="Analyze tokenization metrics",
+    )
+    parser.add_argument(
+        "--analyze_embedding",
+        action="store_true",
+        default=False,
+        help="Analyze source code embeddings",
+    )
+    parser.add_argument(
+        "--local_server",
+        action="store_true",
+        default=False,
+        help="Run a local server to view the report",
+    )
+    parser.add_argument("--port", type=int, default=6000, help="Port to run the local server on")
+    parser.add_argument(
+        "--report_dir",
+        type=Path,
+        default=current_script_dir / "report",
+        help="Directory to save the report",
+    )
+    args = parser.parse_args()
+
+    report_dir = args.report_dir
 
     print("Loading initial tables")
     df_dataset_summary = build_dataset_designs(dd)
     df_dataset_files = build_dataset_files(dd)
 
-    print("Analyzing design sources - simple")
-    df_source_analysis_simple = analyze_design_sources_simple(dd, df_dataset_files)
-    print("Analyzing design sources - tokenization")
-    df_source_analysis_tokenization = analyze_design_sources_tokenization(
-        dd,
-        df_dataset_files,
-    )
-    # df_source_analysis_tokenization = None
+    df_source_analysis_simple = None
+    df_source_analysis_tokenization = None
+    data_source_code_embedding = None
 
+    if args.analyze_basic:
+        print("Analyzing design sources - simple")
+        df_source_analysis_simple = analyze_design_sources_simple(dd, df_dataset_files)
+
+    if args.analyze_tokenization:
+        print("Analyzing design sources - tokenization")
+        df_source_analysis_tokenization = analyze_design_sources_tokenization(
+            dd,
+            df_dataset_files,
+        )
+
+    if args.analyze_embedding:
+        print("Analyzing design sources - embedding")
+        data_source_code_embedding = analyze_design_sources_embedding(df_dataset_files)
+
+    print("Building report")
     build_report(
         df_dataset_summary,
         df_dataset_files,
         report_dir,
         df_source_analysis_simple=df_source_analysis_simple,
         df_source_analysis_tokenization=df_source_analysis_tokenization,
+        source_analysis_embedding_data=data_source_code_embedding,
     )
+
+    if args.local_server:
+        handler = partial(ReportHTTPHandler, directory=str(report_dir.resolve()))
+        with TCPServer(("", args.port), handler) as httpd:
+            print(f"Serving at: http://localhost:{args.port}")
+            webbrowser.open(f"http://localhost:{args.port}")
+            httpd.serve_forever()
+    else:
+        print(f"Report generated at {report_dir}")

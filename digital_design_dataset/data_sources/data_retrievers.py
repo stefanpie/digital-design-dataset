@@ -1533,3 +1533,50 @@ class XACTDatasetRetriever(DataRetriever):
             top_str = top_str_io.read().decode()
             top_fp = design_dir_fp / "top.txt"
             top_fp.write_text(top_str)
+
+
+class EspressoPLADatasetRetriever(DataRetriever):
+    dataset_name: str = "espresso_pla"
+    dataset_tags: ClassVar[list[str]] = ["benchmark", "reference"]
+
+    def get_dataset(self, _overwrite: bool = False) -> None:
+        archive_bytes = get_file_from_github_binary(
+            self.design_dataset.gh_api,
+            "stefanpie",
+            "espresso-pla-designs-verilog",
+            "generated_designs.tar.gz",
+        )
+        archive = tarfile.open(fileobj=io.BytesIO(archive_bytes))
+
+        design_dirs = [p.split("/")[1] for p in archive.getnames() if p.count("/") == 2]
+        for design_dir in design_dirs:
+            design_name = f"espresso_pla__{design_dir}"
+
+            design_dir_fp = self.design_dataset.designs_dir / design_name
+            if design_dir_fp.exists():
+                shutil.rmtree(design_dir_fp)
+            design_dir_fp.mkdir(parents=True, exist_ok=True)
+
+            metadata = {}
+            metadata["design_name"] = design_name
+            metadata["dataset_name"] = self.dataset_name
+            metadata["dataset_tags"] = self.dataset_tags
+            metadata_fp = design_dir_fp / "design.json"
+
+            metadata_fp.write_text(json.dumps(metadata, indent=4))
+
+            source_file_dir = design_dir_fp / "sources"
+            source_file_dir.mkdir(parents=True, exist_ok=True)
+
+            # each is a dir with verilog files in it
+            v_str_io = archive.extractfile(f"generated_designs/{design_dir}/{design_dir}.v")
+            if v_str_io is None:
+                raise ValueError(f"Could not find {design_dir}.v for {design_dir}")
+            v_str = v_str_io.read().decode()
+
+            design_fp = source_file_dir / f"{design_dir}.v"
+            design_fp.write_text(v_str)
+
+            # write a top_file with the top module name
+            top_fp = design_dir_fp / "top.txt"
+            top_fp.write_text(f"{design_dir}")
