@@ -4,6 +4,7 @@ import operator
 from pathlib import Path
 
 from dotenv import dotenv_values
+from joblib import Parallel, delayed
 
 from digital_design_dataset.data_sources.hls_data import PolybenchRetriever
 
@@ -89,8 +90,7 @@ logger = build_logger("test_dataset_retrievers", logging.INFO)
 
 def remove_existing_dataset_designs(d: DesignDataset, retriever_name: str) -> None:
     designs = d.get_design_metadata_by_dataset_name(retriever_name)
-    for design in designs:
-        d.delete_design(design["design_name"])
+    d.delete_multiple_designs([design["design_name"] for design in designs])
 
 
 def auto_retriever(
@@ -148,6 +148,44 @@ def auto_validate(
         )
         pool.close()
         pool.join()
+
+
+def call_get_dataset(r: DataRetriever) -> None:
+    r.get_dataset()
+
+
+def test_retrievers_in_parallel() -> None:
+    d.delete_all_designs()
+
+    retrievers: list[type[DataRetriever]] = [
+        AddersCVUTDatasetRetriever,
+        DeepBenchVerilogDatasetRetriever,
+        EPFLDatasetRetriever,
+        EspressoPLADatasetRetriever,
+        FPGAMicroBenchmarksDatasetRetriever,
+        HW2VecDatasetRetriever,
+        I99TDatasetRetriever,
+        ISCAS85DatasetRetriever,
+        ISCAS89DatasetRetriever,
+        IWLS93DatasetRetriever,
+        KoiosDatasetRetriever,
+        LGSynth89DatasetRetriever,
+        LGSynth91DatasetRetriever,
+        MCNC20DatasetRetriever,
+        OPDBDatasetRetriever,
+        OpencoresDatasetRetriever,
+        RegexFsmVerilogDatasetRetriever,
+        VerilogAddersMongrelgemDatasetRetriever,
+        VTRDatasetRetriever,
+        XACTDatasetRetriever,
+    ]
+
+    retrievers_objs = [r(d) for r in retrievers]
+
+    pool = multiprocessing.Pool(n_jobs)
+    pool.map(call_get_dataset, retrievers_objs, chunksize=1)
+    pool.close()
+    pool.join()
 
 
 ### EPFLDatasetRetriever ###

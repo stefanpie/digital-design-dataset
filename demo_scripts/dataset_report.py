@@ -81,7 +81,10 @@ def build_dataset_designs(design_dataset: DesignDataset) -> pd.DataFrame:
 
 
 def count_non_whitespace_chars(fp: Path) -> int:
-    txt = fp.read_text()
+    try:
+        txt = fp.read_text()
+    except UnicodeDecodeError:
+        raise ValueError(f"Error reading file: {fp}")
     txt_no_whitespace = "".join(txt.split())
     return len(txt_no_whitespace)
 
@@ -690,4 +693,4 @@ if __name__ == "__main__":
             webbrowser.open(f"http://localhost:{args.port}")
             httpd.serve_forever()
     else:
-        print(f"Report generated at {report_dir}")
+        print(f"Report generated at {report_dir / 'report.html'}")

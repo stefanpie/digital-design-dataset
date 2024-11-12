@@ -131,69 +131,17 @@ class OpencoresDatasetRetriever(DataRetriever):
         "6809_6309_compatible_core",
     ]
 
-    def get_dataset(self, _overwrite: bool = False, timeout: int = 30) -> None:
-        download_url = get_file_download_url_from_github(
-            self.design_dataset.gh_api,
-            "stefanpie",
+    def get_dataset(self, _overwrite: bool = False) -> None:
+        gfd = GithubFastDownloader(
             "hardware-design-dataset-opencores",
-            "designs.tar.gz",
+            "stefanpie",
         )
+        gfd.clone_repo()
+        gfd.enable_sparse_checkout()
+        gfd.checkout_stuff(["/designs.tar.gz"])
+        tar_fp = gfd.get_path_on_disk("designs.tar.gz")
 
-        r = requests.get(
-            download_url,
-            timeout=timeout,
-        )
-        if r.status_code != requests.codes.ok:
-            raise RuntimeError(
-                f"Failed to make request: {r.status_code}\n{r.text}\n{r.headers}",
-            )
-
-        # z = zipfile.ZipFile(io.BytesIO(r.content))
-        # designs = []
-        # for fn in z.namelist():
-        #     # get only top level folders "designs/*/"
-        #     # folders may be nested, so we need to check if the folder
-        #     # is a top level folder
-        #     if (fn[-1] == "/") and (fn.count("/") == 2):
-        #         designs.append(fn)
-
-        # for fn in designs:
-        #     base_name = fn.split("/")[1]
-        #     if base_name in self.BLACKLIST:
-        #         continue
-        #     design_name = f"opencores__{base_name}"
-        #     design_dir = self.design_dataset.designs_dir / design_name
-        #     if design_dir.exists():
-        #         shutil.rmtree(design_dir)
-        #     design_dir.mkdir(parents=True, exist_ok=True)
-
-        #     metadata = {}
-        #     metadata["design_name"] = design_name
-        #     metadata["dataset_name"] = self.dataset_name
-        #     metadata["dataset_tags"] = self.dataset_tags
-        #     metadata_fp = design_dir / "design.json"
-        #     metadata_fp.write_text(json.dumps(metadata, indent=4))
-
-        #     aux_files_dir = design_dir / "aux_files"
-        #     aux_files_dir.mkdir(parents=True, exist_ok=True)
-
-        #     source_file_dir = design_dir / "sources"
-        #     source_file_dir.mkdir(parents=True, exist_ok=True)
-
-        #     for file in z.namelist():
-        #         if file.startswith(f"designs/{base_name}/") and file[-1] != "/":
-        #             file_name = file.split("/")[-1]
-        #             extension = file_name.split(".")[-1]
-        #             if f".{extension}" in SOURCE_FILES_EXTENSIONS_SET:
-        #                 fp = source_file_dir / file_name
-        #                 fp.write_text(z.read(file).decode("utf-8"))
-        #             else:
-        #                 fp = aux_files_dir / file_name
-        #                 fp.write_text(z.read(file).decode("utf-8"))
-        # z.close()
-
-        # Open the tar.gz file from the content
-        tar = tarfile.open(fileobj=io.BytesIO(r.content), mode="r:gz")
+        tar = tarfile.open(tar_fp, mode="r:gz")
 
         designs = []
         for member in tar.getmembers():
@@ -247,6 +195,7 @@ class OpencoresDatasetRetriever(DataRetriever):
 
         # Close the tar file
         tar.close()
+        gfd.cleanup()
 
 
 class HW2VecDatasetRetriever(DataRetriever):
@@ -256,20 +205,18 @@ class HW2VecDatasetRetriever(DataRetriever):
     BLACKLIST = "RS232-T100"
 
     def get_dataset(self, _overwrite: bool = False, timeout: int = 30) -> None:
-        download_url = get_file_download_url_from_github(
-            self.design_dataset.gh_api,
-            "AICPS",
+        gfd = GithubFastDownloader(
             "hw2vec",
-            "assets/datasets.zip",
+            "AICPS",
         )
 
-        r = requests.get(download_url, timeout=timeout)
-        # if r.status_code != requests.status_codes.codes.ok:
-        if r.status_code != requests.codes.ok:
-            raise RuntimeError(
-                f"Failed to make request: {r.status_code}\n{r.text}\n{r.headers}",
-            )
-        z = zipfile.ZipFile(io.BytesIO(r.content))
+        gfd.clone_repo()
+        gfd.enable_sparse_checkout()
+        gfd.checkout_stuff(["/assets/datasets.zip"])
+        zip_fp = gfd.get_path_on_disk("assets/datasets.zip")
+
+        z = zipfile.ZipFile(zip_fp)
+
         designs = []
         for fn in z.namelist():
             if fn[-2:] == ".v":
@@ -300,6 +247,7 @@ class HW2VecDatasetRetriever(DataRetriever):
             design_fp.write_text(z.read(fn).decode("utf-8"))
 
         z.close()
+        gfd.cleanup()
 
 
 class VTRDatasetRetriever(DataRetriever):
@@ -318,29 +266,26 @@ class VTRDatasetRetriever(DataRetriever):
     # TODO: find workaround in the future
 
     def get_dataset(self, _overwrite: bool = True) -> None:
-        listing = get_listing_from_github(
-            self.design_dataset.gh_api,
-            "verilog-to-routing",
+        gfd = GithubFastDownloader(
             "vtr-verilog-to-routing",
-            "vtr_flow/benchmarks/verilog",
+            "verilog-to-routing",
         )
+        gfd.clone_repo()
+        gfd.enable_sparse_checkout()
 
-        file_list = []
+        gfd.checkout_stuff(["/vtr_flow/benchmarks/verilog", "/vtr_flow/primitives.v"])
+
+        dir_on_disk = gfd.get_path_on_disk("vtr_flow/benchmarks/verilog")
+        listing = sorted(dir_on_disk.iterdir())
+
+        file_list: list[tuple[str, Path]] = []
         for content_file in listing:
-            if (content_file.type == "file") and (content_file.name[-2:] == ".v"):
-                file_list.append({
-                    "name": content_file.name,
-                    "path": content_file.path,
-                    "url": content_file.download_url,
-                })
+            if content_file.is_file() and (content_file.suffix == ".v"):
+                file_list.append((content_file.name, content_file))
 
-        primitives_file_fp = "vtr_flow/primitives.v"
-        primitives_file_txt = get_file_from_github(
-            self.design_dataset.gh_api,
-            "verilog-to-routing",
-            "vtr-verilog-to-routing",
-            primitives_file_fp,
-        )
+        primitives_file_fp = gfd.get_path_on_disk("vtr_flow/primitives.v")
+        primitives_file_txt = primitives_file_fp.read_text()
+
         primitives_file_txt = primitives_file_txt.replace(
             "module single_port_ram",
             "(* nomem2reg *)\nmodule single_port_ram",
@@ -355,7 +300,7 @@ class VTRDatasetRetriever(DataRetriever):
         )
 
         for file in file_list:
-            base_name = file["name"].replace(".v", "")
+            base_name = file[0].replace(".v", "")
             design_name = f"vtr__{base_name}"
             if base_name in self.BLACKLIST:
                 continue
@@ -373,18 +318,14 @@ class VTRDatasetRetriever(DataRetriever):
 
             source_file_dir = design_dir / "sources"
             source_file_dir.mkdir(parents=True, exist_ok=True)
-            text = get_file_from_github(
-                self.design_dataset.gh_api,
-                "verilog-to-routing",
-                "vtr-verilog-to-routing",
-                file["path"],
-            )
 
-            design_fp = source_file_dir / file["name"]
-            design_fp.write_text(text)
+            design_fp = source_file_dir / file[0]
+            shutil.copy(file[1], design_fp)
 
             design_primitives_fp = source_file_dir / "primitives.v"
             design_primitives_fp.write_text(primitives_file_txt)
+
+        gfd.cleanup()
 
 
 class KoiosDatasetRetriever(DataRetriever):
@@ -392,26 +333,26 @@ class KoiosDatasetRetriever(DataRetriever):
     dataset_tags: ClassVar[list[str]] = ["benchmark"]
 
     def get_dataset(self, _overwrite: bool = False) -> None:
-        listing = get_listing_from_github(
-            self.design_dataset.gh_api,
-            "verilog-to-routing",
+        gfd = GithubFastDownloader(
             "vtr-verilog-to-routing",
-            "vtr_flow/benchmarks/verilog/koios",
+            "verilog-to-routing",
         )
+        gfd.clone_repo()
+        gfd.enable_sparse_checkout()
+        gfd.checkout_stuff(["/vtr_flow/benchmarks/verilog/koios"])
 
-        file_list = []
+        dir_on_disk = gfd.get_path_on_disk("vtr_flow/benchmarks/verilog/koios")
+        listing = sorted(dir_on_disk.iterdir())
+
+        file_list: list[tuple[str, Path]] = []
         for content_file in listing:
-            if (content_file.type == "file") and (content_file.name[-2:] == ".v"):
-                file_list.append({
-                    "name": content_file.name,
-                    "path": content_file.path,
-                    "url": content_file.download_url,
-                })
+            if content_file.is_file() and (content_file.suffix == ".v"):
+                file_list.append((content_file.name, content_file))
 
-        file_list = list(filter(lambda x: "_include.v" not in x["name"], file_list))
+        file_list = list(filter(lambda x: "_include.v" not in x[0], file_list))
 
         for file in file_list:
-            base_name = file["name"].replace(".v", "")
+            base_name = file[0].replace(".v", "")
             design_name = f"koios__{base_name}"
             design_dir = self.design_dataset.designs_dir / design_name
             if design_dir.exists():
@@ -427,14 +368,11 @@ class KoiosDatasetRetriever(DataRetriever):
 
             source_file_dir = design_dir / "sources"
             source_file_dir.mkdir(parents=True, exist_ok=True)
-            text = get_file_from_github(
-                self.design_dataset.gh_api,
-                "verilog-to-routing",
-                "vtr-verilog-to-routing",
-                file["path"],
-            )
-            design_fp = source_file_dir / file["name"]
-            design_fp.write_text(text)
+
+            design_fp = source_file_dir / file[0]
+            shutil.copy(file[1], design_fp)
+
+        gfd.cleanup()
 
 
 class EPFLDatasetRetriever(DataRetriever):
@@ -442,31 +380,34 @@ class EPFLDatasetRetriever(DataRetriever):
     dataset_tags: ClassVar[list[str]] = ["benchmark"]
 
     def get_dataset(self, _overwrite: bool = False) -> None:
-        listing_0 = get_listing_from_github(
-            self.design_dataset.gh_api,
-            "lsils",
+        gfd = GithubFastDownloader(
             "benchmarks",
-            "arithmetic",
-        )
-
-        listing_1 = get_listing_from_github(
-            self.design_dataset.gh_api,
             "lsils",
-            "benchmarks",
-            "random_control",
         )
-        listing = listing_0 + listing_1
+        gfd.clone_repo()
+        gfd.enable_sparse_checkout()
+        gfd.checkout_stuff(["/arithmetic", "/random_control"])
 
-        file_list = []
+        dir_on_disk_arithmetic = gfd.get_path_on_disk("arithmetic")
+        listing_arithmetic = sorted(dir_on_disk_arithmetic.iterdir())
+
+        dir_on_disk_random_control = gfd.get_path_on_disk("random_control")
+        listing_random_control = sorted(dir_on_disk_random_control.iterdir())
+
+        listing = listing_arithmetic + listing_random_control
+
+        file_list: list[dict[str, str | Path]] = []
         for content_file in listing:
-            if (content_file.type == "file") and (content_file.name[-2:] == ".v"):
+            if content_file.is_file() and (content_file.suffix == ".v"):
                 file_list.append({
                     "name": content_file.name,
-                    "path": content_file.path,
-                    "url": content_file.download_url,
+                    "path": content_file.relative_to(gfd.repo_dir),
+                    "path_on_disk": content_file,
                 })
 
         for file in file_list:
+            if not isinstance(file["name"], str):
+                raise TypeError(f"Expected str, got {type(file['name'])}")
             base_name = file["name"].replace(".v", "")
             design_name = f"epfl__{base_name}"
             design_dir = self.design_dataset.designs_dir / design_name
@@ -483,14 +424,13 @@ class EPFLDatasetRetriever(DataRetriever):
 
             source_file_dir = design_dir / "sources"
             source_file_dir.mkdir(parents=True, exist_ok=True)
-            text = get_file_from_github(
-                self.design_dataset.gh_api,
-                "lsils",
-                "benchmarks",
-                file["path"],
-            )
+
+            if not isinstance(file["path_on_disk"], Path):
+                raise TypeError(f"Expected Path, got {type(file['path_on_disk'])}")
             design_fp = source_file_dir / file["name"]
-            design_fp.write_text(text)
+            shutil.copy(file["path_on_disk"], design_fp)
+
+        gfd.cleanup()
 
 
 class OPDBDatasetRetriever(DataRetriever):
@@ -498,12 +438,21 @@ class OPDBDatasetRetriever(DataRetriever):
     dataset_tags: ClassVar[list[str]] = ["benchmark"]
 
     def get_dataset(self, _overwrite: bool = False) -> None:
-        design_list = get_file_from_github(
-            self.design_dataset.gh_api,
-            "PrincetonUniversity",
+        gfd = GithubFastDownloader(
             "OPDB",
-            "modules/piton_baseline_designs.txt",
+            "PrincetonUniversity",
         )
+        gfd.clone_repo()
+        gfd.enable_sparse_checkout()
+        gfd.checkout_stuff(["/modules/piton_baseline_designs.txt"])
+
+        design_list_fp = gfd.get_path_on_disk("modules/piton_baseline_designs.txt")
+        design_list = design_list_fp.read_text()
+
+        new_gh_paths = design_list.splitlines()
+        new_gh_paths = [p for p in new_gh_paths if p.strip()]
+
+        gfd.checkout_stuff(new_gh_paths, reset=False)
 
         for design in design_list.splitlines():
             base_name = "_".join(design.split("/")[1:]).replace(".v", "").replace(".pickle", "")
@@ -522,13 +471,11 @@ class OPDBDatasetRetriever(DataRetriever):
 
             source_file_dir = design_dir / "sources"
             source_file_dir.mkdir(parents=True, exist_ok=True)
-            text = get_file_from_github(
-                self.design_dataset.gh_api,
-                "PrincetonUniversity",
-                "OPDB",
-                design,
-            )
-            Path(source_file_dir / (base_name + ".v")).write_text(text, encoding="utf-8")
+
+            design_fp = gfd.get_path_on_disk(design)
+            shutil.copy(design_fp, source_file_dir / (base_name + ".v"))
+
+        gfd.cleanup()
 
 
 class ISCAS85DatasetRetriever(DataRetriever):
@@ -675,6 +622,7 @@ class LGSynth89DatasetRetriever(DataRetriever):
 
                 source_file_dir = design_dir / "sources"
                 source_file_dir.mkdir(parents=True, exist_ok=True)
+
                 archive.extract(targets=[file_name], path=source_file_dir)
                 archive.reset()
 
@@ -722,6 +670,7 @@ class LGSynth91DatasetRetriever(DataRetriever):
 
                 source_file_dir = design_dir / "sources"
                 source_file_dir.mkdir(parents=True, exist_ok=True)
+
                 archive.extract(targets=[file_name], path=source_file_dir)
                 archive.reset()
 
@@ -910,14 +859,18 @@ class I99TDatasetRetriever(DataRetriever):
                 "Yosys is missing the ghdl module. Please install ghdl to be used with yosys.",
             )
 
-        listing = get_listing_from_github(
-            self.design_dataset.gh_api,
-            "cad-polito-it",
+        gfd = GithubFastDownloader(
             "I99T",
-            "i99t",
+            "cad-polito-it",
         )
-        paths = [content_file.path for content_file in listing if content_file.type == "dir"]
-        paths = sorted(paths)
+        gfd.clone_repo()
+        gfd.enable_sparse_checkout()
+        gfd.checkout_stuff(["/i99t"])
+
+        dir_on_disk = gfd.get_path_on_disk("i99t")
+        paths_on_disk = sorted([p for p in dir_on_disk.iterdir() if p.is_dir()])
+        paths = [str(p.relative_to(gfd.repo_dir)) for p in paths_on_disk]
+
         for path in paths:
             base_name = path.split("/")[-1]
             if base_name in self.BLACKLIST:
@@ -942,14 +895,8 @@ class I99TDatasetRetriever(DataRetriever):
             source_vhdl_file_dir = design_dir / "sources_vhdl"
             source_vhdl_file_dir.mkdir(parents=True, exist_ok=True)
 
-            text = get_file_from_github(
-                self.design_dataset.gh_api,
-                "cad-polito-it",
-                "I99T",
-                f"{path}/{vhd_name}",
-            )
-            design_fp = source_vhdl_file_dir / vhdl_name
-            design_fp.write_text(text)
+            design_fp = gfd.get_path_on_disk(f"{path}/{vhd_name}")
+            shutil.copy(design_fp, source_vhdl_file_dir / vhdl_name)
 
             sources_file_dir = design_dir / "sources"
             sources_file_dir.mkdir(parents=True, exist_ok=True)
@@ -974,6 +921,8 @@ class I99TDatasetRetriever(DataRetriever):
                 raise RuntimeError(
                     f"Yosys failed to convert {vhdl_name} to Verilog:\n{p.stdout}\n{p.stderr}\n",
                 )
+
+        gfd.cleanup()
 
 
 class AddersCVUTDatasetRetriever(DataRetriever):
@@ -1155,34 +1104,35 @@ class VerilogAddersMongrelgemDatasetRetriever(DataRetriever):
     ]
 
     def get_dataset(self, _overwrite: bool = False) -> None:
+        gfd = GithubFastDownloader(
+            "Verilog-Adders",
+            "mongrelgem",
+        )
+        gfd.clone_repo()
+        gfd.enable_sparse_checkout()
+        gfd.checkout_stuff(self.DESIGN_FILES)
+
         for design_fp in self.DESIGN_FILES:
             base_name = design_fp.split("/")[-1].replace(".v", "")
-            design_name = f"verilog_adders_mongrelgem__{base_name}"
-            design_dir = self.design_dataset.designs_dir / design_name
-            if design_dir.exists():
-                shutil.rmtree(design_dir)
-            design_dir.mkdir(parents=True, exist_ok=True)
 
-            metadata = {}
-            metadata["design_name"] = design_name
-            metadata["dataset_name"] = self.dataset_name
-            metadata["dataset_tags"] = self.dataset_tags
-            metadata_fp = design_dir / "design.json"
-            metadata_fp.write_text(json.dumps(metadata, indent=4))
-
-            source_file_dir = design_dir / "sources"
-            source_file_dir.mkdir(parents=True, exist_ok=True)
-
-            text = get_file_from_github(
-                self.design_dataset.gh_api,
-                "mongrelgem",
-                "Verilog-Adders",
-                design_fp,
+            scaffold = build_design_scaffolding(
+                self.design_dataset.designs_dir,
+                base_name,
+                "verilog_adders_mongrelgem",
+                self.dataset_name,
+                self.dataset_tags,
             )
+            source_file_dir = scaffold.source_dir
+
+            fp_on_disk = gfd.get_path_on_disk(design_fp)
+            text = fp_on_disk.read_text()
+
             design_fp_local = source_file_dir / design_fp.split("/")[-1]
             design_fp_local.write_text(text)
 
             unroll_cell_array_instances(design_fp_local)
+
+        gfd.cleanup()
 
 
 class Texas97DatasetRetriever(DataRetriever):
@@ -1421,11 +1371,13 @@ class DeepBenchVerilogDatasetRetriever(DataRetriever):
             source_file_dir = scaffold.source_dir
 
             path_on_disk = gfd.get_path_on_disk(gh_path)
-            listing = sorted(list(path_on_disk.iterdir()))
+            listing = sorted(path_on_disk.iterdir())
             for file in listing:
                 if file.is_dir():
                     raise ValueError("Expected a file, got a directory")
                 shutil.copy(file, source_file_dir)
+
+        gfd.cleanup()
 
 
 class RegexFsmVerilogDatasetRetriever(DataRetriever):
@@ -1433,13 +1385,14 @@ class RegexFsmVerilogDatasetRetriever(DataRetriever):
     dataset_tags: ClassVar[list[str]] = ["synthetic"]
 
     def get_dataset(self, _overwrite: bool = False) -> None:
-        archive_bytes = get_file_from_github_binary(
-            self.design_dataset.gh_api,
-            "stefanpie",
-            "regex-fsm-verilog",
-            "generated_designs.tar.gz",
-        )
-        archive = tarfile.open(fileobj=io.BytesIO(archive_bytes))
+        gfd = GithubFastDownloader("regex-fsm-verilog", "stefanpie")
+        gfd.clone_repo()
+        gfd.enable_sparse_checkout()
+        gfd.checkout_stuff(["/generated_designs.tar.gz"])
+
+        file_on_disk = gfd.get_path_on_disk("generated_designs.tar.gz")
+        archive = tarfile.open(file_on_disk)
+
         design_dirs = [p.split("/")[1] for p in archive.getnames() if p.count("/") == 1]
         for design_dir in design_dirs:
             scaffold = build_design_scaffolding(
@@ -1460,6 +1413,7 @@ class RegexFsmVerilogDatasetRetriever(DataRetriever):
             design_fp.write_text(v_str)
 
         archive.close()
+        gfd.cleanup()
 
 
 class XACTDatasetRetriever(DataRetriever):
@@ -1467,13 +1421,13 @@ class XACTDatasetRetriever(DataRetriever):
     dataset_tags: ClassVar[list[str]] = ["benchmark", "reference"]
 
     def get_dataset(self, _overwrite: bool = False) -> None:
-        archive_bytes = get_file_from_github_binary(
-            self.design_dataset.gh_api,
-            "stefanpie",
-            "xact-designs",
-            "designs_converted.zip",
-        )
-        archive = zipfile.ZipFile(io.BytesIO(archive_bytes))
+        gfd = GithubFastDownloader("xact-designs", "stefanpie")
+        gfd.clone_repo()
+        gfd.enable_sparse_checkout()
+        gfd.checkout_stuff(["/designs_converted.zip"])
+
+        file_on_disk = gfd.get_path_on_disk("designs_converted.zip")
+        archive = zipfile.ZipFile(file_on_disk)
 
         design_dirs_set = {path_str.split("/")[0].strip() for path_str in archive.namelist()}
         design_dirs = sorted(design_dirs_set)
@@ -1507,6 +1461,7 @@ class XACTDatasetRetriever(DataRetriever):
             top_fp.write_text(top_str)
 
         archive.close()
+        gfd.cleanup()
 
 
 class EspressoPLADatasetRetriever(DataRetriever):
@@ -1514,13 +1469,13 @@ class EspressoPLADatasetRetriever(DataRetriever):
     dataset_tags: ClassVar[list[str]] = ["benchmark", "reference"]
 
     def get_dataset(self, _overwrite: bool = False) -> None:
-        archive_bytes = get_file_from_github_binary(
-            self.design_dataset.gh_api,
-            "stefanpie",
-            "espresso-pla-designs-verilog",
-            "generated_designs.tar.gz",
-        )
-        archive = tarfile.open(fileobj=io.BytesIO(archive_bytes))
+        gfd = GithubFastDownloader("espresso-pla-designs-verilog", "stefanpie")
+        gfd.clone_repo()
+        gfd.enable_sparse_checkout()
+        gfd.checkout_stuff(["/generated_designs.tar.gz"])
+
+        file_on_disk = gfd.get_path_on_disk("generated_designs.tar.gz")
+        archive = tarfile.open(file_on_disk)
 
         design_dirs = [p.split("/")[1] for p in archive.getnames() if p.count("/") == 2]
         for design_dir in design_dirs:
@@ -1548,6 +1503,7 @@ class EspressoPLADatasetRetriever(DataRetriever):
             top_fp.write_text(f"{design_dir}")
 
         archive.close()
+        gfd.cleanup()
 
 
 class FPGAMicroBenchmarksDatasetRetriever(DataRetriever):
@@ -1603,7 +1559,6 @@ class FPGAMicroBenchmarksDatasetRetriever(DataRetriever):
         ("interface_opencores_simple_spi", "interface/opencores_simple_spi/rtl"),
         ("interface_opencores_uart16550", "interface/opencores_uart16550/rtl"),
         ("interface_routing_test", "interface/routing_test"),
-        ("interface_rs485", "interface/rs485/rtl"),
         ("interface_rtcclock", "interface/rtcclock/rtl"),
         ("interface_sockit_owm", "interface/sockit_owm/rtl"),
         ("interface_spimaster", "interface/spimaster/rtl"),
@@ -1737,3 +1692,5 @@ class FPGAMicroBenchmarksDatasetRetriever(DataRetriever):
         self.get_designs_single_dir(gfd, _overwrite=_overwrite)
         self.get_multi_file_designs(gfd, _overwrite=_overwrite)
         self.get_single_file_designs(gfd, _overwrite=_overwrite)
+
+        gfd.cleanup()

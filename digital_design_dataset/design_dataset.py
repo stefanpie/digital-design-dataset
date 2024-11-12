@@ -274,3 +274,11 @@ class DesignDataset:
             raise ValueError(f"Design {design_name} not found in dataset.")
         design_dir = self.designs_dir / design_name
         shutil.rmtree(design_dir)
+
+    def delete_multiple_designs(self, design_names: list[str]) -> None:
+        for design_name in design_names:
+            self.delete_design(design_name)
+
+    def delete_all_designs(self) -> None:
+        shutil.rmtree(self.designs_dir)
+        self.designs_dir.mkdir()

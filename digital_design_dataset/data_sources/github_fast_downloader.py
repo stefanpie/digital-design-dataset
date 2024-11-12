@@ -26,7 +26,7 @@ class GithubFastDownloader:
         self.repo_owner = repo_owner
         self.repo_url = f"https://github.com/{self.repo_owner}/{self.repo_name}.git"
         self.repo_branch = repo_branch
-        self.temp_dir = tempfile.TemporaryDirectory()
+        self.temp_dir = tempfile.TemporaryDirectory(prefix="github_fast_downloader__")
         self.repo_dir = Path(self.temp_dir.name) / "repo"
 
         # Register the cleanup function for vaious terimnations
@@ -36,8 +36,6 @@ class GithubFastDownloader:
     def clone_repo(self) -> None:
         if not self.repo_branch:
             self.repo_branch = self.get_default_branch()
-
-        print(f"Cloning repository {self.repo_url} (branch: {self.repo_branch})")
 
         # Shallow clone the repository (depth=1)
         subprocess.run(
