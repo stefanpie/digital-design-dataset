@@ -2,8 +2,10 @@
 **/__pycache__/
 .mypy_cache/
 **/.ipynb_checkpoints/
+.ruff_cache
 
-.env
-
+.pytest_cache
 .coverage
 htmlcov/
+
+.env

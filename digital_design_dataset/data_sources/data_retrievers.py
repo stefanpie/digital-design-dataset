@@ -131,7 +131,7 @@ class OpencoresDatasetRetriever(DataRetriever):
         "6809_6309_compatible_core",
     ]
 
-    def get_dataset(self, _overwrite: bool = False) -> None:
+    def get_dataset(self, overwrite: bool = False) -> None:
         gfd = GithubFastDownloader(
             "hardware-design-dataset-opencores",
             "stefanpie",
@@ -204,7 +204,7 @@ class HW2VecDatasetRetriever(DataRetriever):
 
     BLACKLIST = "RS232-T100"
 
-    def get_dataset(self, _overwrite: bool = False, timeout: int = 30) -> None:
+    def get_dataset(self, overwrite: bool = False, timeout: int = 30) -> None:
         gfd = GithubFastDownloader(
             "hw2vec",
             "AICPS",
@@ -265,7 +265,7 @@ class VTRDatasetRetriever(DataRetriever):
     # leading to long runtime and out-of-memory issues
     # TODO: find workaround in the future
 
-    def get_dataset(self, _overwrite: bool = True) -> None:
+    def get_dataset(self, overwrite: bool = True) -> None:
         gfd = GithubFastDownloader(
             "vtr-verilog-to-routing",
             "verilog-to-routing",
@@ -332,7 +332,7 @@ class KoiosDatasetRetriever(DataRetriever):
     dataset_name: str = "koios"
     dataset_tags: ClassVar[list[str]] = ["benchmark"]
 
-    def get_dataset(self, _overwrite: bool = False) -> None:
+    def get_dataset(self, overwrite: bool = False) -> None:
         gfd = GithubFastDownloader(
             "vtr-verilog-to-routing",
             "verilog-to-routing",
@@ -379,7 +379,7 @@ class EPFLDatasetRetriever(DataRetriever):
     dataset_name: str = "epfl"
     dataset_tags: ClassVar[list[str]] = ["benchmark"]
 
-    def get_dataset(self, _overwrite: bool = False) -> None:
+    def get_dataset(self, overwrite: bool = False) -> None:
         gfd = GithubFastDownloader(
             "benchmarks",
             "lsils",
@@ -437,7 +437,7 @@ class OPDBDatasetRetriever(DataRetriever):
     dataset_name: str = "opdb"
     dataset_tags: ClassVar[list[str]] = ["benchmark"]
 
-    def get_dataset(self, _overwrite: bool = False) -> None:
+    def get_dataset(self, overwrite: bool = False) -> None:
         gfd = GithubFastDownloader(
             "OPDB",
             "PrincetonUniversity",
@@ -484,7 +484,7 @@ class ISCAS85DatasetRetriever(DataRetriever):
 
     ISCAS_85_89_URL = "https://ddd.fit.cvut.cz/www/prj/Benchmarks/ISCAS.7z"
 
-    def get_dataset(self, _overwrite: bool = False, timeout: int = 30) -> None:
+    def get_dataset(self, overwrite: bool = False, timeout: int = 30) -> None:
         temp_dir = TemporaryDirectory()
         temp_dir_fp = Path(temp_dir.name)
         temp_file_fp = temp_dir_fp / "iscas.7z"
@@ -532,7 +532,7 @@ class ISCAS89DatasetRetriever(DataRetriever):
 
     ISCAS_85_89_URL = "https://ddd.fit.cvut.cz/www/prj/Benchmarks/ISCAS.7z"
 
-    def get_dataset(self, _overwrite: bool = False, timeout: int = 30) -> None:
+    def get_dataset(self, overwrite: bool = False, timeout: int = 30) -> None:
         temp_dir = TemporaryDirectory()
         temp_dir_fp = Path(temp_dir.name)
         temp_file_fp = temp_dir_fp / "iscas.7z"
@@ -590,7 +590,7 @@ class LGSynth89DatasetRetriever(DataRetriever):
 
     LGSYNTH89_URL = "https://ddd.fit.cvut.cz/www/prj/Benchmarks/LGSynth89.7z"
 
-    def get_dataset(self, _overwrite: bool = False) -> None:
+    def get_dataset(self, overwrite: bool = False) -> None:
         temp_dir = TemporaryDirectory()
         temp_dir_fp = Path(temp_dir.name)
         temp_file_fp = temp_dir_fp / "lgsynth89.7z"
@@ -638,7 +638,7 @@ class LGSynth91DatasetRetriever(DataRetriever):
 
     LGSYNTH91_URL = "https://ddd.fit.cvut.cz/www/prj/Benchmarks/LGSynth91.7z"
 
-    def get_dataset(self, _overwrite: bool = False) -> None:
+    def get_dataset(self, overwrite: bool = False) -> None:
         temp_dir = TemporaryDirectory()
         temp_dir_fp = Path(temp_dir.name)
         temp_file_fp = temp_dir_fp / "lgsynth89.7z"
@@ -746,7 +746,7 @@ class IWLS93DatasetRetriever(DataRetriever):
 
     BLACKLIST: ClassVar = ["diffeq", "elliptic", "frisc", "tseng"]
 
-    def get_dataset(self, _overwrite: bool = False) -> None:
+    def get_dataset(self, overwrite: bool = False) -> None:
         yosys_bin = auto_find_bin("yosys")
         if yosys_bin is None:
             raise RuntimeError(
@@ -839,7 +839,7 @@ class I99TDatasetRetriever(DataRetriever):
         "b30",
     ]
 
-    def get_dataset(self, _overwrite: bool = False) -> None:
+    def get_dataset(self, overwrite: bool = False) -> None:
         # check for yosys
         yosys_bin = auto_find_bin("yosys")
         if yosys_bin is None:
@@ -931,7 +931,7 @@ class AddersCVUTDatasetRetriever(DataRetriever):
 
     ADDERS_CVUT_URL: str = "https://ddd.fit.cvut.cz/www/prj/Benchmarks/Adders.7z"
 
-    def get_dataset(self, _overwrite: bool = False) -> None:
+    def get_dataset(self, overwrite: bool = False) -> None:
         # check for yosys
         yosys_bin = auto_find_bin("yosys")
         if yosys_bin is None:
@@ -1103,7 +1103,7 @@ class VerilogAddersMongrelgemDatasetRetriever(DataRetriever):
         "Kogge-Stone Adder/KoggeStoneAdder.v",
     ]
 
-    def get_dataset(self, _overwrite: bool = False) -> None:
+    def get_dataset(self, overwrite: bool = False) -> None:
         gfd = GithubFastDownloader(
             "Verilog-Adders",
             "mongrelgem",
@@ -1222,7 +1222,7 @@ class MCNC20DatasetRetriever(DataRetriever):
         t += "\n.end"
         fp.write_text(t)
 
-    def get_dataset(self, _overwrite: bool = False, timeout: int = 30) -> None:
+    def get_dataset(self, overwrite: bool = False, timeout: int = 30) -> None:
         # check for yosys
         yosys_bin = auto_find_bin("yosys")
         if yosys_bin is None:
@@ -1348,7 +1348,7 @@ class DeepBenchVerilogDatasetRetriever(DataRetriever):
         "verilog/training/RNN/Vanilla_2560_32_Core_256_32_256_Reuse_10_1_20",
     ]
 
-    def get_dataset(self, _overwrite: bool = False) -> None:
+    def get_dataset(self, overwrite: bool = False) -> None:
         gfd = GithubFastDownloader("DeepBenchVerilog", "raminrasoulinezhad")
         gfd.clone_repo()
         gfd.enable_sparse_checkout()
@@ -1384,7 +1384,7 @@ class RegexFsmVerilogDatasetRetriever(DataRetriever):
     dataset_name: str = "regex_fsm_verilog"
     dataset_tags: ClassVar[list[str]] = ["synthetic"]
 
-    def get_dataset(self, _overwrite: bool = False) -> None:
+    def get_dataset(self, overwrite: bool = False) -> None:
         gfd = GithubFastDownloader("regex-fsm-verilog", "stefanpie")
         gfd.clone_repo()
         gfd.enable_sparse_checkout()
@@ -1420,7 +1420,7 @@ class XACTDatasetRetriever(DataRetriever):
     dataset_name: str = "xact"
     dataset_tags: ClassVar[list[str]] = ["benchmark", "reference"]
 
-    def get_dataset(self, _overwrite: bool = False) -> None:
+    def get_dataset(self, overwrite: bool = False) -> None:
         gfd = GithubFastDownloader("xact-designs", "stefanpie")
         gfd.clone_repo()
         gfd.enable_sparse_checkout()
@@ -1468,7 +1468,7 @@ class EspressoPLADatasetRetriever(DataRetriever):
     dataset_name: str = "espresso_pla"
     dataset_tags: ClassVar[list[str]] = ["benchmark", "reference"]
 
-    def get_dataset(self, _overwrite: bool = False) -> None:
+    def get_dataset(self, overwrite: bool = False) -> None:
         gfd = GithubFastDownloader("espresso-pla-designs-verilog", "stefanpie")
         gfd.clone_repo()
         gfd.enable_sparse_checkout()
@@ -1595,7 +1595,7 @@ class FPGAMicroBenchmarksDatasetRetriever(DataRetriever):
         "dsp/mac",
     ]
 
-    def get_single_file_designs(self, gfd: GithubFastDownloader, _overwrite: bool = False) -> None:
+    def get_single_file_designs(self, gfd: GithubFastDownloader, overwrite: bool = False) -> None:
         for gh_path in self.DESIGN_PATHS_SINGLE_FILE:
             scaffolding = build_design_scaffolding(
                 self.design_dataset.designs_dir,
@@ -1610,7 +1610,7 @@ class FPGAMicroBenchmarksDatasetRetriever(DataRetriever):
             text_fp = gfd.get_path_on_disk(gh_path)
             shutil.copy(text_fp, source_file_dir)
 
-    def get_multi_file_designs(self, gfd: GithubFastDownloader, _overwrite: bool = False) -> None:
+    def get_multi_file_designs(self, gfd: GithubFastDownloader, overwrite: bool = False) -> None:
         for d_name, gh_paths in self.DESIGN_PATHS_MULTI_FILE.items():
             scaffolding = build_design_scaffolding(
                 self.design_dataset.designs_dir,
@@ -1659,7 +1659,7 @@ class FPGAMicroBenchmarksDatasetRetriever(DataRetriever):
         for file_hdl in files_hdl:
             shutil.copy(file_hdl, source_file_dir)
 
-    def get_designs_single_dir(self, gfd: GithubFastDownloader, _overwrite: bool = False) -> None:
+    def get_designs_single_dir(self, gfd: GithubFastDownloader, overwrite: bool = False) -> None:
         for design_name, gh_design_dir in self.DESIGN_PATHS_SINGLE_DIR:
             self.get_one_single_dir(
                 gfd,
@@ -1667,7 +1667,7 @@ class FPGAMicroBenchmarksDatasetRetriever(DataRetriever):
                 gh_design_dir,
             )
 
-    def get_designs_collections(self, gfd: GithubFastDownloader, _overwrite: bool = False) -> None:
+    def get_designs_collections(self, gfd: GithubFastDownloader, overwrite: bool = False) -> None:
         for dir_collection in self.DESIGN_PATHS_COLLECTION:
             path_on_disk = gfd.get_path_on_disk(dir_collection)
             listing = sorted(path_on_disk.iterdir())
@@ -1680,7 +1680,7 @@ class FPGAMicroBenchmarksDatasetRetriever(DataRetriever):
                     ignore_tb_files=True,
                 )
 
-    def get_dataset(self, _overwrite: bool = False) -> None:
+    def get_dataset(self, overwrite: bool = False) -> None:
         gfd = GithubFastDownloader(self.REPO_NAME, self.REPO_OWNER)
         gfd.clone_repo()
         gfd.enable_sparse_checkout()
@@ -1688,9 +1688,9 @@ class FPGAMicroBenchmarksDatasetRetriever(DataRetriever):
             ["/dsp/", "/fsm/", "/interface/", "/processors/", "/ram/", "/simple_gates/", "/simple_registers/"],
         )
 
-        self.get_designs_collections(gfd, _overwrite=_overwrite)
-        self.get_designs_single_dir(gfd, _overwrite=_overwrite)
-        self.get_multi_file_designs(gfd, _overwrite=_overwrite)
-        self.get_single_file_designs(gfd, _overwrite=_overwrite)
+        self.get_designs_collections(gfd, overwrite=overwrite)
+        self.get_designs_single_dir(gfd, overwrite=overwrite)
+        self.get_multi_file_designs(gfd, overwrite=overwrite)
+        self.get_single_file_designs(gfd, overwrite=overwrite)
 
         gfd.cleanup()

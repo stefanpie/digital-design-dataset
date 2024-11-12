@@ -8,6 +8,8 @@ from typing import ClassVar
 import requests
 
 from digital_design_dataset.data_sources.data_retrievers import DataRetriever, get_file_download_url_from_github
+from digital_design_dataset.data_sources.github_fast_downloader import GithubFastDownloader
+from digital_design_dataset.design_dataset import build_design_scaffolding
 
 
 class PolybenchRetriever(DataRetriever):
@@ -20,27 +22,23 @@ class PolybenchRetriever(DataRetriever):
         "hls_polybench__fixed__medium__build.tar.gz",
     ]
 
-    def get_dataset(self, _overwrite: bool = False, timeout: int = 30) -> None:
+    def get_dataset(self, overwrite: bool = False, timeout: int = 30) -> None:
+        gfd = GithubFastDownloader(
+            "hls-polybench",
+            "stefanpie",
+        )
+
+        gfd.clone_repo()
+        gfd.enable_sparse_checkout()
+
+        gfd.checkout_stuff([f"/dist/{bs}" for bs in self.BENCHMARK_SETS])
+
         for benchmark_set in self.BENCHMARK_SETS:
             set_type, set_size = benchmark_set.split("__")[1:3]
 
-            download_url = get_file_download_url_from_github(
-                self.design_dataset.gh_api,
-                "stefanpie",
-                "hls-polybench",
-                f"dist/{benchmark_set}",
-            )
+            file_on_disk = gfd.get_path_on_disk(f"dist/{benchmark_set}")
+            targz = tarfile.open(file_on_disk, "r:gz")
 
-            r = requests.get(
-                download_url,
-                timeout=timeout,
-            )
-            if r.status_code != requests.codes.ok:
-                raise RuntimeError(
-                    f"Failed to make request: {r.status_code}\n{r.text}\n{r.headers}",
-                )
-
-            targz = tarfile.open(fileobj=io.BytesIO(r.content))
             kernels = []
             for member in targz.getmembers():
                 if member.name.count("/") == 0:
@@ -49,22 +47,17 @@ class PolybenchRetriever(DataRetriever):
 
             for kernel in kernels:
                 design_name_kernel = kernel.replace("-", "_")
-                design_name = f"{self.dataset_name}__{set_type}__{set_size}__{design_name_kernel}"
 
-                design_dir = self.design_dataset.designs_dir / design_name
-                if design_dir.exists():
-                    shutil.rmtree(design_dir)
-                design_dir.mkdir(parents=True, exist_ok=True)
+                base_name = f"{set_type}__{set_size}__{design_name_kernel}"
 
-                metadata = {}
-                metadata["design_name"] = design_name
-                metadata["dataset_name"] = self.dataset_name
-                metadata["dataset_tags"] = self.dataset_tags
-                metadata_fp = design_dir / "design.json"
-                metadata_fp.write_text(json.dumps(metadata, indent=4))
-
-                source_file_dir = design_dir / "sources"
-                source_file_dir.mkdir(parents=True, exist_ok=True)
+                scaffold = build_design_scaffolding(
+                    self.design_dataset.designs_dir,
+                    base_name,
+                    "hls_polybench",
+                    self.dataset_name,
+                    self.dataset_tags,
+                )
+                source_file_dir = scaffold.source_dir
 
                 # find the kernel/ip_*.zip file
                 ip_zip_fp = f"{kernel}/ip_{kernel}.zip"
@@ -83,3 +76,5 @@ class PolybenchRetriever(DataRetriever):
                 ip_zip_data.close()
 
             targz.close()
+
+        gfd.cleanup()

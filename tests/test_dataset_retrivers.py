@@ -1,10 +1,14 @@
+import cProfile
+import io
 import logging
 import multiprocessing
 import operator
+import pstats
+from multiprocessing.pool import ThreadPool
 from pathlib import Path
+from pstats import SortKey
 
 from dotenv import dotenv_values
-from joblib import Parallel, delayed
 
 from digital_design_dataset.data_sources.hls_data import PolybenchRetriever
 

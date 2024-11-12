@@ -3,10 +3,14 @@ name = "digital-design-dataset"
 version = "0.0.1"
 readme = "README.md"
 license = { file = "LICENSE" }
-authors = []
+authors = [{ name = "Stefan Abi-Karam", email = "stefanabikaram@gatech.edu" }]
 keywords = [
     "FPGA",
     "Electronic Design Automation",
+    "VLSI",
+    "Verilog",
+    "VHDL",
+    "Digital Design",
 ]
 classifiers = []
 requires-python = ">=3.11"
@@ -18,9 +22,9 @@ docs = ["sphinx", "furo", "sphinx-autodoc-typehints"]
 test = ["pytest"]
 
 [project.urls]
-# "Homepage" = ""
-# "Repository" = "" 
-# "Documentation" = ""
+"Homepage" = "https://github.com/stefanpie/digital-design-dataset?tab=readme-ov-file"
+"Repository" = "https://github.com/stefanpie/digital-design-dataset?tab=readme-ov-file"
+"Documentation" = "https://github.com/stefanpie/digital-design-dataset?tab=readme-ov-file"
 
 
 [build-system]
@@ -39,18 +43,15 @@ addopts = [
     "--cov=digital_design_dataset",
     "--cov-report=html",
     # "--cov-append"
-] 
+]
 log_cli = true
-
-
+pytest_plugins = ["pytest_cov"]
 
 
 [tool.ruff]
 line-length = 120
 preview = true
-exclude = [
-    "*.ipynb"
-]
+exclude = ["*.ipynb"]
 
 
 [tool.ruff.lint]
@@ -72,5 +73,8 @@ ignore = [
     "S603",
     "S607",
     "PLR0914",
-    "G004"
+    "G004",
 ]
+
+[tool.mypy]
+ignore_missing_imports = true
