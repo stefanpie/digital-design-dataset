@@ -8,7 +8,6 @@ from dotenv import dotenv_values
 
 from digital_design_dataset.data_sources.data_retrievers import (
     DataRetriever,
-    ISCAS85DatasetRetriever,
     OpencoresDatasetRetriever,
 )
 from digital_design_dataset.design_dataset import DesignDataset

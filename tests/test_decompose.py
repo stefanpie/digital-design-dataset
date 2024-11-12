@@ -1,13 +1,11 @@
 import operator
 from pathlib import Path
-from pprint import pp
 
 import networkx as nx
 from dotenv import dotenv_values
 
 from digital_design_dataset.data_sources.data_retrievers import OpencoresDatasetRetriever
 from digital_design_dataset.design_dataset import (
-    HARDWARE_DATA_TEXT_EXTENSIONS,
     HARDWARE_DATA_TEXT_EXTENSIONS_SET,
     VERILOG_SOURCE_EXTENSIONS_SET,
     DesignDataset,

@@ -16,10 +16,7 @@ if __name__ == "__main__":
     aig, json_data = yosys_aig(design_sources)
     print(json_data)
 
-    colors = [
-        "blue" if data["node_type"] == "cell" else "black"
-        for _, data in aig.nodes(data=True)
-    ]
+    colors = ["blue" if data["node_type"] == "cell" else "black" for _, data in aig.nodes(data=True)]
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
     nx.draw_networkx(aig, ax=ax, with_labels=False, node_size=10, node_color=colors)
 

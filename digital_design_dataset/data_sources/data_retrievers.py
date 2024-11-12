@@ -8,7 +8,6 @@ import tarfile
 import zipfile
 from abc import ABC, abstractmethod
 from pathlib import Path
-from pprint import pp
 from tempfile import TemporaryDirectory
 from typing import ClassVar
 
@@ -17,9 +16,11 @@ import requests
 from github import Github
 from github.ContentFile import ContentFile
 
+from digital_design_dataset.data_sources.github_fast_downloader import GithubFastDownloader
 from digital_design_dataset.design_dataset import (
     SOURCE_FILES_EXTENSIONS_SET,
     DesignDataset,
+    build_design_scaffolding,
 )
 from digital_design_dataset.utils import auto_find_bin
 
@@ -1398,46 +1399,33 @@ class DeepBenchVerilogDatasetRetriever(DataRetriever):
     ]
 
     def get_dataset(self, _overwrite: bool = False) -> None:
+        gfd = GithubFastDownloader("DeepBenchVerilog", "raminrasoulinezhad")
+        gfd.clone_repo()
+        gfd.enable_sparse_checkout()
+        gfd.checkout_stuff(self.DESIGN_PATHS)
+
         for gh_path in self.DESIGN_PATHS:
             if "inference/Conv" in gh_path:
-                base_name = gh_path.split("/")[-2:]
-                base_name = "_".join(base_name)
+                base_name_split = gh_path.split("/")[-2:]
+                base_name = "_".join(base_name_split)
             else:
                 base_name = gh_path.split("/")[-1]
-            design_name = f"deepbenchverilog__{base_name}"
-            design_dir = self.design_dataset.designs_dir / design_name
-            if design_dir.exists():
-                shutil.rmtree(design_dir)
-            design_dir.mkdir(parents=True, exist_ok=True)
 
-            metadata = {}
-            metadata["design_name"] = design_name
-            metadata["dataset_name"] = self.dataset_name
-            metadata["dataset_tags"] = self.dataset_tags
-            metadata_fp = design_dir / "design.json"
-            metadata_fp.write_text(json.dumps(metadata, indent=4))
-
-            source_file_dir = design_dir / "sources"
-            source_file_dir.mkdir(parents=True, exist_ok=True)
-
-            # each is a dir with verilog files in it
-            listing = get_listing_from_github(
-                self.design_dataset.gh_api,
-                "raminrasoulinezhad",
-                "DeepBenchVerilog",
-                gh_path,
+            scaffold = build_design_scaffolding(
+                self.design_dataset.designs_dir,
+                base_name,
+                "deepbenchverilog",
+                self.dataset_name,
+                self.dataset_tags,
             )
+            source_file_dir = scaffold.source_dir
+
+            path_on_disk = gfd.get_path_on_disk(gh_path)
+            listing = sorted(list(path_on_disk.iterdir()))
             for file in listing:
-                if file.type == "dir":
+                if file.is_dir():
                     raise ValueError("Expected a file, got a directory")
-                text = get_file_from_github(
-                    self.design_dataset.gh_api,
-                    "raminrasoulinezhad",
-                    "DeepBenchVerilog",
-                    file.path,
-                )
-                design_fp = source_file_dir / file.name
-                design_fp.write_text(text)
+                shutil.copy(file, source_file_dir)
 
 
 class RegexFsmVerilogDatasetRetriever(DataRetriever):
@@ -1454,23 +1442,14 @@ class RegexFsmVerilogDatasetRetriever(DataRetriever):
         archive = tarfile.open(fileobj=io.BytesIO(archive_bytes))
         design_dirs = [p.split("/")[1] for p in archive.getnames() if p.count("/") == 1]
         for design_dir in design_dirs:
-            design_name = f"regex_fsm_verilog__{design_dir}"
-
-            design_dir_fp = self.design_dataset.designs_dir / design_name
-            if design_dir_fp.exists():
-                shutil.rmtree(design_dir_fp)
-            design_dir_fp.mkdir(parents=True, exist_ok=True)
-
-            metadata = {}
-            metadata["design_name"] = design_name
-            metadata["dataset_name"] = self.dataset_name
-            metadata["dataset_tags"] = self.dataset_tags
-            metadata_fp = design_dir_fp / "design.json"
-
-            metadata_fp.write_text(json.dumps(metadata, indent=4))
-
-            source_file_dir = design_dir_fp / "sources"
-            source_file_dir.mkdir(parents=True, exist_ok=True)
+            scaffold = build_design_scaffolding(
+                self.design_dataset.designs_dir,
+                design_dir,
+                "regex_fsm_verilog",
+                self.dataset_name,
+                self.dataset_tags,
+            )
+            source_file_dir = scaffold.source_dir
 
             v_str_io = archive.extractfile(f"generated_designs/{design_dir}/fsm.v")
             if v_str_io is None:
@@ -1479,6 +1458,8 @@ class RegexFsmVerilogDatasetRetriever(DataRetriever):
 
             design_fp = source_file_dir / "fsm.v"
             design_fp.write_text(v_str)
+
+        archive.close()
 
 
 class XACTDatasetRetriever(DataRetriever):
@@ -1494,28 +1475,19 @@ class XACTDatasetRetriever(DataRetriever):
         )
         archive = zipfile.ZipFile(io.BytesIO(archive_bytes))
 
-        design_dirs = {path_str.split("/")[0].strip() for path_str in archive.namelist()}
-
-        design_dirs = sorted(design_dirs)
+        design_dirs_set = {path_str.split("/")[0].strip() for path_str in archive.namelist()}
+        design_dirs = sorted(design_dirs_set)
 
         for design_dir in design_dirs:
-            design_name = f"xact__{design_dir}"
-
-            design_dir_fp = self.design_dataset.designs_dir / design_name
-            if design_dir_fp.exists():
-                shutil.rmtree(design_dir_fp)
-            design_dir_fp.mkdir(parents=True, exist_ok=True)
-
-            metadata = {}
-            metadata["design_name"] = design_name
-            metadata["dataset_name"] = self.dataset_name
-            metadata["dataset_tags"] = self.dataset_tags
-            metadata_fp = design_dir_fp / "design.json"
-
-            metadata_fp.write_text(json.dumps(metadata, indent=4))
-
-            source_file_dir = design_dir_fp / "sources"
-            source_file_dir.mkdir(parents=True, exist_ok=True)
+            scaffold = build_design_scaffolding(
+                self.design_dataset.designs_dir,
+                design_dir,
+                "xact",
+                self.dataset_name,
+                self.dataset_tags,
+            )
+            source_file_dir = scaffold.source_dir
+            design_dir_fp = scaffold.design_dir_fp
 
             verilog_files = [
                 "vlib.v",
@@ -1534,6 +1506,8 @@ class XACTDatasetRetriever(DataRetriever):
             top_fp = design_dir_fp / "top.txt"
             top_fp.write_text(top_str)
 
+        archive.close()
+
 
 class EspressoPLADatasetRetriever(DataRetriever):
     dataset_name: str = "espresso_pla"
@@ -1550,23 +1524,15 @@ class EspressoPLADatasetRetriever(DataRetriever):
 
         design_dirs = [p.split("/")[1] for p in archive.getnames() if p.count("/") == 2]
         for design_dir in design_dirs:
-            design_name = f"espresso_pla__{design_dir}"
-
-            design_dir_fp = self.design_dataset.designs_dir / design_name
-            if design_dir_fp.exists():
-                shutil.rmtree(design_dir_fp)
-            design_dir_fp.mkdir(parents=True, exist_ok=True)
-
-            metadata = {}
-            metadata["design_name"] = design_name
-            metadata["dataset_name"] = self.dataset_name
-            metadata["dataset_tags"] = self.dataset_tags
-            metadata_fp = design_dir_fp / "design.json"
-
-            metadata_fp.write_text(json.dumps(metadata, indent=4))
-
-            source_file_dir = design_dir_fp / "sources"
-            source_file_dir.mkdir(parents=True, exist_ok=True)
+            scaffolding = build_design_scaffolding(
+                self.design_dataset.designs_dir,
+                design_dir,
+                "espresso_pla",
+                self.dataset_name,
+                self.dataset_tags,
+            )
+            source_file_dir = scaffolding.source_dir
+            design_dir_fp = scaffolding.design_dir_fp
 
             # each is a dir with verilog files in it
             v_str_io = archive.extractfile(f"generated_designs/{design_dir}/{design_dir}.v")
@@ -1580,3 +1546,194 @@ class EspressoPLADatasetRetriever(DataRetriever):
             # write a top_file with the top module name
             top_fp = design_dir_fp / "top.txt"
             top_fp.write_text(f"{design_dir}")
+
+        archive.close()
+
+
+class FPGAMicroBenchmarksDatasetRetriever(DataRetriever):
+    dataset_name: str = "fpga_micro_benchmarks"
+    dataset_tags: ClassVar[list[str]] = ["benchmark"]
+
+    REPO_OWNER: ClassVar[str] = "tangxifan"
+    REPO_NAME: ClassVar[str] = "micro_benchmark"
+
+    DESIGN_PATHS_SINGLE_FILE: ClassVar[list[str]] = [
+        "simple_registers/signal_gen/clock_divider.v",
+        "simple_registers/signal_gen/pulse_generator.v",
+        "simple_registers/signal_gen/reset_generator.v",
+        "ram/pipelined_8bit_adder/pipelined_8bit_adder.v",
+    ]
+
+    DESIGN_PATHS_MULTI_FILE: ClassVar[dict[str, list[str]]] = {
+        "FSM_three_code": [
+            "fsm/FSM_three_code/FSM_hour.v",
+            "fsm/FSM_three_code/FSM_minute.v",
+            "fsm/FSM_three_code/FSM_second.v",
+            "fsm/FSM_three_code/FSM_top.v",
+        ],
+    }
+
+    DESIGN_PATHS_SINGLE_DIR: ClassVar[list[tuple[str, str]]] = [
+        ("simple_registers_blinking", "simple_registers/blinking"),
+        ("simple_registers_clk_divider", "simple_registers/clk_divider"),
+        ("simple_registers_ff_dffnr", "simple_registers/ff/dffnr"),
+        ("simple_registers_pwm_generator", "simple_registers/pwm_generator"),
+        ("simple_gates_and2", "simple_gates/and2"),
+        ("simple_gates_and2_latch", "simple_gates/and2_latch"),
+        ("simple_gates_and2_latch_2clock", "simple_gates/and2_latch_2clock"),
+        ("simple_gates_and2_latch_2clock", "simple_gates/and2_latch_2clock"),
+        ("simple_gates_and2_or2", "simple_gates/and2_or2"),
+        ("simple_gates_and2_pipelined", "simple_gates/and2_pipelined"),
+        ("simple_gates_and4", "simple_gates/and4"),
+        ("simple_gates_or2", "simple_gates/or2"),
+        ("ram_asyn_spram_4x1", "ram/asyn_spram_4x1"),
+        ("ram_dual_port_ram_16k", "ram/dual_port_ram_16k"),
+        ("ram_dual_port_ram_1k", "ram/dual_port_ram_1k"),
+        ("ram_fifo", "ram/fifo/rtl"),
+        ("ram_syn_spram_4x1", "ram/syn_spram_4x1"),
+        ("processors_VexRiscv_full", "processors/VexRiscv_full/rtl"),
+        ("processors_VexRiscv_murax", "processors/VexRiscv_murax/rtl"),
+        ("processors_VexRiscv_small", "processors/VexRiscv_small/rtl"),
+        ("interface_SAPone", "interface/SAPone/rtl"),
+        ("interface_cf_ldpc", "interface/cf_ldpc/rtl"),
+        ("interface_opencores_can", "interface/opencores_can/rtl/verilog"),
+        ("interface_opencores_gpio", "interface/opencores_gpio/rtl"),
+        ("interface_opencores_i2c", "interface/opencores_i2c/rtl"),
+        ("interface_opencores_ptc", "interface/opencores_ptc/rtl"),
+        ("interface_opencores_simple_spi", "interface/opencores_simple_spi/rtl"),
+        ("interface_opencores_uart16550", "interface/opencores_uart16550/rtl"),
+        ("interface_routing_test", "interface/routing_test"),
+        ("interface_rs485", "interface/rs485/rtl"),
+        ("interface_rtcclock", "interface/rtcclock/rtl"),
+        ("interface_sockit_owm", "interface/sockit_owm/rtl"),
+        ("interface_spimaster", "interface/spimaster/rtl"),
+        ("interface_test_mode_low", "interface/test_mode_low"),
+        ("interface_test_modes_k4_N4", "interface/test_modes/k4_N4"),
+        ("interface_test_modes_k6_N10", "interface/test_modes/k6_N10"),
+        ("interface_uberddr3", "interface/uberddr3/rtl"),
+        ("interface_verilog_spi", "interface/verilog_spi/rtl"),
+        ("interface_wb_lcd", "interface/wb_lcd/rtl"),
+        ("interface_wb_lcd_ramless", "interface/wb_lcd_ramless/rtl"),
+        ("interface_wb_rs232_syscon", "interface/wb_rs232_syscon/rtl"),
+        ("interface_wbi2c", "interface/wbi2c"),
+        ("interface_wbqspiflash", "interface/wbqspiflash/rtl"),
+        ("interface_wbscope", "interface/wbscope/rtl"),
+        ("interface_wbspi_master", "interface/wbspi_master/rtl"),
+        ("interface_wbuart32", "interface/wbuart32/rtl"),
+        ("fsm_fsm_seq_detector", "fsm/fsm_seq_detector"),
+        ("fsm_scalable_seq_detector", "fsm/scalable_seq_detector"),
+        ("dsp_FIR_filter", "dsp/FIR_filter"),
+        ("dsp_cordic", "dsp/cordic/rtl"),
+        ("dsp_cordic_core", "dsp/cordic_core"),
+        ("dsp_cr_div", "dsp/cr_div/rtl"),
+        ("dsp_cr_div", "dsp/cr_div/rtl"),
+        ("dsp_mult_mult_2_pipelined", "dsp/mult/mult_2_pipelined"),
+        ("dsp_pid_controller", "dsp/pid_controller/rtl"),
+        ("dsp_signed_integer_divider", "dsp/signed_integer_divider/rtl"),
+        ("simple_gates_adder_4", "simple_gates/adder/adder_4"),
+        ("simple_gates_adder_6", "simple_gates/adder/adder_6"),
+        ("simple_gates_adder_16", "simple_gates/adder/adder_16"),
+    ]
+
+    DESIGN_PATHS_COLLECTION: ClassVar[list[str]] = [
+        "simple_registers/counters",
+        "dsp/mac",
+    ]
+
+    def get_single_file_designs(self, gfd: GithubFastDownloader, _overwrite: bool = False) -> None:
+        for gh_path in self.DESIGN_PATHS_SINGLE_FILE:
+            scaffolding = build_design_scaffolding(
+                self.design_dataset.designs_dir,
+                Path(gh_path).stem,
+                "fpga_micro_benchmarks",
+                self.dataset_name,
+                self.dataset_tags,
+            )
+
+            source_file_dir = scaffolding.source_dir
+
+            text_fp = gfd.get_path_on_disk(gh_path)
+            shutil.copy(text_fp, source_file_dir)
+
+    def get_multi_file_designs(self, gfd: GithubFastDownloader, _overwrite: bool = False) -> None:
+        for d_name, gh_paths in self.DESIGN_PATHS_MULTI_FILE.items():
+            scaffolding = build_design_scaffolding(
+                self.design_dataset.designs_dir,
+                d_name,
+                "fpga_micro_benchmarks",
+                self.dataset_name,
+                self.dataset_tags,
+            )
+            source_file_dir = scaffolding.source_dir
+
+            for gh_path in gh_paths:
+                text_fp = gfd.get_path_on_disk(gh_path)
+                shutil.copy(text_fp, source_file_dir)
+
+    def get_one_single_dir(
+        self,
+        gfd: GithubFastDownloader,
+        design_name_base: str,
+        gh_design_dir: str,
+        ignore_tb_files: bool = False,
+    ) -> None:
+        scaffolding = build_design_scaffolding(
+            self.design_dataset.designs_dir,
+            design_name_base,
+            "fpga_micro_benchmarks",
+            self.dataset_name,
+            self.dataset_tags,
+        )
+
+        source_file_dir = scaffolding.source_dir
+
+        path_on_disk = gfd.get_path_on_disk(gh_design_dir)
+        listing = sorted(path_on_disk.iterdir())
+
+        files_hdl: list[Path] = []
+        for listing_item in listing:
+            if listing_item.is_file() and Path(listing_item.name).suffix in SOURCE_FILES_EXTENSIONS_SET:
+                files_hdl.append(listing_item)
+
+        def tb_filter(file_hdl: Path) -> bool:
+            return not Path(file_hdl.name).stem.endswith("_tb")
+
+        if ignore_tb_files:
+            files_hdl = [f for f in files_hdl if tb_filter(f)]
+
+        for file_hdl in files_hdl:
+            shutil.copy(file_hdl, source_file_dir)
+
+    def get_designs_single_dir(self, gfd: GithubFastDownloader, _overwrite: bool = False) -> None:
+        for design_name, gh_design_dir in self.DESIGN_PATHS_SINGLE_DIR:
+            self.get_one_single_dir(
+                gfd,
+                design_name,
+                gh_design_dir,
+            )
+
+    def get_designs_collections(self, gfd: GithubFastDownloader, _overwrite: bool = False) -> None:
+        for dir_collection in self.DESIGN_PATHS_COLLECTION:
+            path_on_disk = gfd.get_path_on_disk(dir_collection)
+            listing = sorted(path_on_disk.iterdir())
+            subdirs = [p for p in listing if p.is_dir()]
+            for design_subdir in subdirs:
+                self.get_one_single_dir(
+                    gfd,
+                    design_subdir.name,
+                    str(design_subdir.relative_to(gfd.repo_dir)),
+                    ignore_tb_files=True,
+                )
+
+    def get_dataset(self, _overwrite: bool = False) -> None:
+        gfd = GithubFastDownloader(self.REPO_NAME, self.REPO_OWNER)
+        gfd.clone_repo()
+        gfd.enable_sparse_checkout()
+        gfd.checkout_stuff(
+            ["/dsp/", "/fsm/", "/interface/", "/processors/", "/ram/", "/simple_gates/", "/simple_registers/"],
+        )
+
+        self.get_designs_collections(gfd, _overwrite=_overwrite)
+        self.get_designs_single_dir(gfd, _overwrite=_overwrite)
+        self.get_multi_file_designs(gfd, _overwrite=_overwrite)
+        self.get_single_file_designs(gfd, _overwrite=_overwrite)

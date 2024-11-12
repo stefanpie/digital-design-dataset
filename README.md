@@ -30,46 +30,53 @@ This work is pursued by Stefan Abi-Karam ([stefanabikaram@gatech.edu](mailto:ste
 - 〰️ OS - MLBlocks
 - 〰️ OS - PULP Cores and Libraries
 - 〰️ OS - GRLIB IP Library
-- 〰️ OS - DeepBenchVerilog
-- 🏗️ OS - tangxifan/micro\_benchmark
+- ✅ OS - DeepBenchVerilog
+- ✅ OS - tangxifan/micro\_benchmark
 - 〰️ OS - UT-LCA/tpu\_like\_design
 - 〰️ OS - UT-LCA/tpu\_v2
 - 〰️ OS - UT-LCA/brainwave-like-design
-- 〰️ OS - mongrelgem/Verilog-Adder
+- ✅ OS - mongrelgem/Verilog-Adder
 - 〰️ OS - taneroksuz/fpu
 - 〰️ OS - alexforencich/* Cores
+<br>
 - ✅ Bench - HW2VEC
 - ✅ Bench - OpenPiton Design Benchmark
 - ✅ Bench - Verilog to Routing (VTR)
 - ✅ Bench - Koios 2.0
 - 🏗️ Bench - Titan 2.0
-- 🏗️ Bench - MCNC 20
+- ✅ Bench - MCNC 20
 - ✅ Bench - ISCAS 85
 - ✅ Bench - ISCAS 89
 - ✅ Bench - LGSynth 89
-- 🏗️ Bench - LGSynth 91
-- 🏗️ Bench - IWLS 93
-- 🏗️ Bench - I99T (ITC 99 subset)
+- ✅ Bench - LGSynth 91
+- ✅ Bench - IWLS 93
+- ✅ Bench - I99T (ITC 99 subset)
 - 🏗️ Bench - IWLS 2005: Faraday Subset
 - 🏗️ Bench - IWLS 2005: Gaisler Subset
 - ✅ Bench - EPFL Combinational Benchmark
 - 🏗️ Bench - HDLBits / VerilogEval Subset
-- 🏗️ HLS - PolyBench
+<br>
+- ✅ HLS - PolyBench
 - 🏗️ HLS - Machsuite
 - 🏗️ HLS - Rosetta
 - 🏗️ HLS - CHStone
-- 〰️ HLS - Rodina
-- 〰️ HLS - Parallel Programming For FPGAs
-- 〰️ HLS - Xilinx/Vitis-HLS-Introductory-Examples
-- 〰️ Exp - Regex State Machines
+- 🏗️ HLS - Rodina
+- 🏗️ HLS - Parallel Programming For FPGAs
+- 🏗️ HLS - Xilinx/Vitis-HLS-Introductory-Examples
+<br>
+- ✅ Exp - Regex State Machines
 - 〰️ Exp - Scraped Efabless Submissions
+<br>
 - 〰️ DSL / Arch - PGRA
 - 〰️ DSL / Arch - OpenFPGA
 - 〰️ DSL / Arch - FloPoCo
+<br>
+- ✅ Demo - Espresso PLA
+- ✅ Demo - XACT Designs
 
 OS: Open Source, Bench: Benchmark, HLS: High Level Synthesis, Exp: Experiment, DSL / Arch: Domain Specific Language and Architecture Generators
 
-Note 1: Since we define Verilog as our based HDL, we must translate some sources from formats like VHDL or BLIF into Verilog. These only apply to a few cases so far such as Titan benchmarks and the GRLIB IP library.
+Note 1: Since we define Verilog as our based HDL, we must translate some sources from formats like VHDL or BLIF into Verilog. This includes cases like the Titan benchmarks and the GRLIB IP library. Somtimes this also includes building tools to translate older scarcely documented formats like PLA and XNF. This is the case for the Espresso PLA demo and the XACT designs.
 
 Note 2: For HLS based sources, we can use different HLS tools for different versions of the source. To begin with, we will use Vitis HLS. Other HLS tools include Intel HLS Compiler, Microchip's SmartHLS, Bambu, and Dynamatic.
 
@@ -77,12 +84,13 @@ Note 2: For HLS based sources, we can use different HLS tools for different vers
 
 - ✅ Verible - AST / CST
 - ✅ Yosys - Module Listing
-- 🏗️ Yosys - Module Hierarchy
+- ✅ Yosys - Module Hierarchy
+- ✅ Yosys - Auto Top Module Identification
 - ✅ Yosys - Generic Synthesis / AIG (using `synth` + `aigmap`)
 - 🏗️ Yosys - Xilinx Synthesis + Techmap
 - 🏗️ ISE - Synth + PnR
 - 〰️ Vivado - Synth + PnR
-- 〰️ Quartus - Synth + PnR
+- ✅ Quartus - Synth + PnR
 - 〰️ OpenROAD
 
 There is an explicit focus on FPGA tools as an initial priority since the active research this project is part of is focused on EDA flows for FPGAs.

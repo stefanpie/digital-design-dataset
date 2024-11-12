@@ -4,7 +4,6 @@ import operator
 from pathlib import Path
 
 from dotenv import dotenv_values
-from joblib import Parallel, delayed
 
 from digital_design_dataset.data_sources.hls_data import PolybenchRetriever
 
@@ -21,6 +20,7 @@ from digital_design_dataset.data_sources.data_retrievers import (
     DeepBenchVerilogDatasetRetriever,
     EPFLDatasetRetriever,
     EspressoPLADatasetRetriever,
+    FPGAMicroBenchmarksDatasetRetriever,
     HW2VecDatasetRetriever,
     I99TDatasetRetriever,
     ISCAS85DatasetRetriever,
@@ -40,7 +40,7 @@ from digital_design_dataset.data_sources.data_retrievers import (
 from digital_design_dataset.design_dataset import (
     DesignDataset,
 )
-from digital_design_dataset.flows.flows import Flow, ModuleInfoFlow, YosysAIGFlow
+from digital_design_dataset.flows.flows import ModuleInfoFlow, YosysSimpleSynthFlow
 from digital_design_dataset.logger import build_logger
 
 DIR_CURRENT = Path(__file__).parent
@@ -105,7 +105,7 @@ def auto_retriever(
 def run_single(
     design: dict,
     f_module: ModuleInfoFlow,
-    f_synth: YosysAIGFlow,
+    f_synth: YosysSimpleSynthFlow,
     logger: logging.Logger,
 ) -> None:
     logger.info(f"{design['design_name']}: Running {f_module.__class__.__name__}")
@@ -134,7 +134,7 @@ def auto_validate(
         designs = d.get_design_metadata_by_dataset_name(dataset_name)
 
     f_module = ModuleInfoFlow(d)
-    f_synth = YosysAIGFlow(d)
+    f_synth = YosysSimpleSynthFlow(d)
 
     if n_jobs == 1:
         for design in designs:
@@ -328,3 +328,12 @@ def test_espresso_pla_retriever() -> None:
 
 def test_espresso_pla_validate() -> None:
     auto_validate(d, EspressoPLADatasetRetriever, n_jobs=n_jobs)
+
+
+### FPGAMicroBenchmarksDatasetRetriever ###
+def test_fpga_micro_benchmarks_retriever() -> None:
+    auto_retriever(d, FPGAMicroBenchmarksDatasetRetriever)
+
+
+def test_fpga_micro_benchmarks_validate() -> None:
+    auto_validate(d, FPGAMicroBenchmarksDatasetRetriever, n_jobs=n_jobs)

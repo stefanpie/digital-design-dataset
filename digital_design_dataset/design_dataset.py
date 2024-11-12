@@ -4,25 +4,21 @@ import os
 import re
 import shutil
 from collections import Counter
-from collections.abc import Generator, Iterator
+from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 
 from github import Auth, Github
-from pydantic import BaseModel
 
 VERILOG_SOURCE_EXTENSIONS = [".v", ".sv", ".svh", ".vh", ".h", ".inc"]
-VERILOG_SOURCE_EXTENSIONS_SET = set(VERILOG_SOURCE_EXTENSIONS) | {
-    ext.upper() for ext in VERILOG_SOURCE_EXTENSIONS
-}
+VERILOG_SOURCE_EXTENSIONS_SET = set(VERILOG_SOURCE_EXTENSIONS) | {ext.upper() for ext in VERILOG_SOURCE_EXTENSIONS}
 
 HARDWARE_DATA_TEXT_EXTENSIONS = [".coe", ".mif", ".mem"]
 HARDWARE_DATA_TEXT_EXTENSIONS_SET = set(HARDWARE_DATA_TEXT_EXTENSIONS) | {
     ext.upper() for ext in HARDWARE_DATA_TEXT_EXTENSIONS
 }
 
-SOURCE_FILES_EXTENSIONS_SET = (
-    VERILOG_SOURCE_EXTENSIONS_SET | HARDWARE_DATA_TEXT_EXTENSIONS_SET
-)
+SOURCE_FILES_EXTENSIONS_SET = VERILOG_SOURCE_EXTENSIONS_SET | HARDWARE_DATA_TEXT_EXTENSIONS_SET
 
 # === General Notes and TODOs ===
 # - Refactor this to multiple files, one for metaobjects,
@@ -43,9 +39,90 @@ def make_dir_if_not_empty(path: Path) -> None:
         path.mkdir(parents=True, exist_ok=True)
     elif len(os.listdir(path)) > 0:
         raise DirectoryNotEmptyError(
-            "Directory is not empty. Support for partially constructed "
-            "datasets is not implemented yet.",
+            "Directory is not empty. Support for partially constructed datasets is not implemented yet.",
         )
+
+
+def build_metadata(
+    design_name: str,
+    dataset_name: str,
+    dataset_tags: list[str],
+    dir_to_write: Path | None = None,
+    default_filename: str = "design.json",
+) -> tuple[dict, Path | None]:
+    metadata: dict[str, str | list[str]] = {}
+    metadata["design_name"] = design_name
+    metadata["dataset_name"] = dataset_name
+    metadata["dataset_tags"] = dataset_tags
+    if dir_to_write is not None:
+        if not dir_to_write.exists():
+            raise ValueError(f"Directory {dir_to_write} does not exist")
+        metadata_fp = dir_to_write / default_filename
+        metadata_fp.write_text(json.dumps(metadata, indent=4))
+    else:
+        metadata_fp = None
+    return metadata, metadata_fp
+
+
+def build_individual_design_dir(
+    dataset_designs_dir: Path,
+    design_name: str,
+) -> Path:
+    design_dir_fp = dataset_designs_dir / design_name
+    if design_dir_fp.exists():
+        shutil.rmtree(design_dir_fp)
+    design_dir_fp.mkdir(parents=True, exist_ok=True)
+    return design_dir_fp
+
+
+def build_sources_dir(
+    design_dir_fp: Path,
+    sources_dir_name: str = "sources",
+) -> Path:
+    if not design_dir_fp.exists():
+        raise ValueError(f"Design directory {design_dir_fp} does not exist")
+    source_file_dir = design_dir_fp / sources_dir_name
+    source_file_dir.mkdir()
+    return source_file_dir
+
+
+@dataclass
+class DesignScaffoldingOutput:
+    design_name: str
+    design_dir_fp: Path
+    metadata: dict
+    metadata_fp: Path
+    source_dir: Path
+
+
+def build_design_scaffolding(
+    dataset_designs_dir: Path,
+    design_name_base: str,
+    design_name_prefix: str,
+    dataset_name: str,
+    dataset_tags: list[str],
+    sources_dir_name: str = "sources",
+    metadata_filename: str = "design.json",
+):
+    design_name = f"{design_name_prefix}__{design_name_base}"
+    design_dir_fp = build_individual_design_dir(dataset_designs_dir, design_name)
+    metadata, metadata_fp = build_metadata(
+        design_name,
+        dataset_name,
+        dataset_tags,
+        dir_to_write=design_dir_fp,
+        default_filename=metadata_filename,
+    )
+    if metadata_fp is None:
+        raise ValueError("metadata_fp is None, not supposed to happen")
+    source_dir = build_sources_dir(design_dir_fp, sources_dir_name)
+    return DesignScaffoldingOutput(
+        design_name=design_name,
+        design_dir_fp=design_dir_fp,
+        metadata=metadata,
+        metadata_fp=metadata_fp,
+        source_dir=source_dir,
+    )
 
 
 class DesignDataset:
@@ -155,11 +232,7 @@ class DesignDataset:
             designs that match the pattern.
 
         """
-        metadata = [
-            design
-            for design in self.index
-            if re.match(design_name_regex_pattern, design["design_name"])
-        ]
+        metadata = [design for design in self.index if re.match(design_name_regex_pattern, design["design_name"])]
         return metadata
 
     def get_design_metadata_by_dataset_name(self, dataset_name: str) -> list[dict]:
@@ -176,9 +249,7 @@ class DesignDataset:
             given dataset name.
 
         """
-        metadata = [
-            design for design in self.index if design["dataset_name"] == dataset_name
-        ]
+        metadata = [design for design in self.index if design["dataset_name"] == dataset_name]
         return metadata
 
     def get_design_source_files(self, design_name: str) -> list[Path]:

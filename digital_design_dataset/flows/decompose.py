@@ -3,10 +3,8 @@ import operator
 import re
 import shutil
 import subprocess
-import sys
 import tempfile
 from pathlib import Path
-from pprint import pp
 
 import networkx as nx
 

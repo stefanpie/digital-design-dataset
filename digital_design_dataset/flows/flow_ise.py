@@ -37,9 +37,7 @@ def flow_ise(
     ngd_file = build_dir / f"{top_module}.ngd"
     ncd_file = build_dir / f"{top_module}.ncd"
     bit_file = build_dir / f"{top_module}.bit"
-    ucf_file = (
-        build_dir / f"{top_module}.ucf"
-    )  # Assuming you have a UCF file for constraints
+    ucf_file = build_dir / f"{top_module}.ucf"  # Assuming you have a UCF file for constraints
 
     # Step 1: Synthesize (xst)
     synth_command = [

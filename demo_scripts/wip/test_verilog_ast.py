@@ -27,12 +27,8 @@ if __name__ == "__main__":
     pos = nx.nx_agraph.graphviz_layout(ast_tree, prog="twopi")
     nx.draw_networkx_nodes(ast_tree, pos, ax=ax[0], node_size=50)
     nx.draw_networkx_nodes(ast_tree, pos, ax=ax[1], node_size=50)
-    edges_ast = [
-        edge for edge in ast_tree.edges(data=True) if edge[2]["t_edge_type"] == "ast"
-    ]
-    edges_nco = [
-        edge for edge in ast_tree.edges(data=True) if edge[2]["t_edge_type"] == "nco"
-    ]
+    edges_ast = [edge for edge in ast_tree.edges(data=True) if edge[2]["t_edge_type"] == "ast"]
+    edges_nco = [edge for edge in ast_tree.edges(data=True) if edge[2]["t_edge_type"] == "nco"]
     nx.draw_networkx_edges(ast_tree, pos, edgelist=edges_ast, ax=ax[0], node_size=50)
     nx.draw_networkx_edges(
         ast_tree,

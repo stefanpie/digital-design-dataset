@@ -68,13 +68,7 @@ design_names = []
 dataset_names = []
 n_modules = []
 for design in test_dataset.index:
-    num_modules_fp = (
-        test_dataset.designs_dir
-        / design["design_name"]
-        / "flows"
-        / "module_count"
-        / "num_modules.txt"
-    )
+    num_modules_fp = test_dataset.designs_dir / design["design_name"] / "flows" / "module_count" / "num_modules.txt"
     n_modules.append(int(num_modules_fp.read_text().strip()))
     source_files = test_dataset.get_design_source_files(design["design_name"])
     for fp in source_files:
@@ -140,11 +134,7 @@ for fp, design_name, dataset_name in tqdm.tqdm(
     data_single.extend(hash_modules_from_file(fp, design_name, dataset_name))
 
 df = pd.DataFrame(data_single)
-df_grouped = (
-    df.groupby("module_hash")
-    .agg(count=("module_hash", "count"))
-    .rename(columns={"count": "unique_count"})
-)
+df_grouped = df.groupby("module_hash").agg(count=("module_hash", "count")).rename(columns={"count": "unique_count"})
 df = df.merge(df_grouped, on="module_hash")
 df = df.sort_values(
     ["unique_count", "module_hash", "module_name", "design_name", "dataset_name"],

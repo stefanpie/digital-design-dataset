@@ -112,8 +112,7 @@ def index_all_verilog_repos(
         print(f"Fetching page: {page}")
         print(f"Percent complete: {(page / pages_to_fetch) * 100}%")
         print(
-            "Percent of total repos:"
-            f" {(page * repos_per_page / num_total_repos) * 100}%",
+            f"Percent of total repos: {(page * repos_per_page / num_total_repos) * 100}%",
         )
         page_data = search_verilog_repos(page=page, gh_token=gh_token)
         processed_page_data = process_search_data(page_data)
