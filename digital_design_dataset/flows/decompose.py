@@ -747,3 +747,16 @@ class AutoTopModule:
             depth = nx.dag_longest_path_length(sub_design)
             db[node] = depth
         return db
+
+
+def auto_top(
+    source_files: list[Path],
+) -> str:
+    g = compute_hierarchy_redundent(source_files)
+    auto_top_helper = AutoTopModule(g)
+    db = auto_top_helper.scores_huristic
+    db_sorted = sorted(db.items(), key=operator.itemgetter(1), reverse=True)
+    if len(db_sorted) > 1 and db_sorted[0][1] == db_sorted[1][1]:
+        raise RuntimeError("Multiple top modules with same heuristic score")
+    auto_top_module = max(db.items(), key=operator.itemgetter(1))[0]
+    return auto_top_module
