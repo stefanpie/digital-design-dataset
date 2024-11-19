@@ -228,11 +228,15 @@ class YosysSimpleSynthFlow(Flow):
 
         design_metadata_fp.write_text(json.dumps(design_metadata, indent=4))
 
-        aig_graph, json_data, verilog_raw, stat_txt, stat_json = yosys_simple_synth(
+        rtlil_pre_raw, aig_graph, json_data, verilog_raw, rtlil_raw, stat_txt, stat_json = yosys_simple_synth(
             sources_fps,
             flow_dir,
             yosys_bin=self.yosys_bin,
         )
+
+        rtlil_pre_fp = flow_dir / "design__pre.rtlil"
+        rtlil_pre_fp.write_text(rtlil_pre_raw)
+
         aig_graph_json = nx.node_link_data(aig_graph)
         aig_graph_fp = flow_dir / "aig_graph.json"
         aig_graph_fp.write_text(json.dumps(aig_graph_json, indent=4))
@@ -242,6 +246,9 @@ class YosysSimpleSynthFlow(Flow):
 
         verilog_raw_fp = flow_dir / "aig_verilog.v"
         verilog_raw_fp.write_text(verilog_raw)
+
+        rtlil_fp = flow_dir / "design.rtlil"
+        rtlil_fp.write_text(rtlil_raw)
 
         stat_txt_fp = flow_dir / "stat.txt"
         stat_txt_fp.write_text(stat_txt)

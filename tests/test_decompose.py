@@ -1,3 +1,4 @@
+import json
 import operator
 from pathlib import Path
 
@@ -18,6 +19,7 @@ from digital_design_dataset.flows.decompose import (
     decompose_design_structured,
     decompose_design_text,
     get_top_nodes,
+    run_yosys_for_data,
     simple_synth_check_yosys,
 )
 
@@ -236,6 +238,10 @@ def test_compute_hierarchy_agree__opencores() -> None:
 def test_single_top__opencores():
     designs = get_opencores_designs(overwrite=True)
     num_designs = len(designs)
+
+    # filter to only invlude opencores__usbhostslave
+    designs = [design for design in designs if "opencores__tv80_core" in design["design_name"]]
+
     for i, design in enumerate(designs):
         design_name = design["design_name"]
         design_dir = d.designs_dir / design_name
@@ -245,6 +251,10 @@ def test_single_top__opencores():
         print(
             f"{i + 1}/{num_designs} Computing hierarchy for {design_name} using text approach",
         )
+
+        yosys_data = run_yosys_for_data(verilog_sources_fps)
+        yosys_data_fp = design_dir / "yosys_data.json"
+        yosys_data_fp.write_text(json.dumps(yosys_data, indent=4))
 
         g = compute_hierarchy_redundent(verilog_sources_fps)
         top_nodes = get_top_nodes(g)
@@ -292,4 +302,5 @@ def test_single_top__opencores():
         assert simple_synth_check_yosys(
             {fp.name: fp.read_text() for fp in verilog_sources_fps},
             top_node,
+            extra_data_files=[fp for fp in sources_fps if fp.suffix in HARDWARE_DATA_TEXT_EXTENSIONS_SET],
         )

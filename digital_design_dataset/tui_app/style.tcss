@@ -1,0 +1,19 @@
+#dataset_selection {
+    height: auto;
+}
+#dataset_info {
+    height: auto;
+}
+
+#dataset_info {
+    layout: horizontal;
+}
+
+#dataset_info > #dataset_list {
+    width: 1fr;
+}
+
+#dataset_info > #main_area {
+    width: 4fr;
+}
+

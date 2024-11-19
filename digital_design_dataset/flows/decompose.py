@@ -3,8 +3,8 @@ import operator
 import re
 import shutil
 import subprocess
-import tempfile
 from pathlib import Path
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 
 import networkx as nx
 
@@ -12,10 +12,12 @@ from digital_design_dataset.design_dataset import HARDWARE_DATA_TEXT_EXTENSIONS_
 
 
 def run_yosys_for_data(source_files: list[Path]) -> dict:
-    json_data_file = tempfile.NamedTemporaryFile(suffix=".json")
+    json_data_file = NamedTemporaryFile(suffix=".json")
 
     script = ""
     for source_file in source_files:
+        if source_file.suffix in HARDWARE_DATA_TEXT_EXTENSIONS_SET:
+            continue
         script += f"read_verilog {source_file};\n"
     script += "hierarchy;\n"
     script += "proc;\n"
@@ -50,8 +52,8 @@ def run_yosys_for_sub_design(
     top_module: str,
     modules_to_remove: set[str],
 ) -> str:
-    output_verilog_file = tempfile.NamedTemporaryFile(suffix=".v")
-    rename_list_file = tempfile.NamedTemporaryFile(suffix=".txt")
+    output_verilog_file = NamedTemporaryFile(suffix=".v")
+    rename_list_file = NamedTemporaryFile(suffix=".txt")
 
     script = ""
     for source_file in source_files:
@@ -124,7 +126,7 @@ def run_yosys_for_sub_design(
 def extract_design_dag(data_yosys: dict) -> nx.DiGraph:
     # pp(data_yosys)
     # /tmp/tmpmqq_4c0c.json
-    # json_data_file = tempfile.NamedTemporaryFile(suffix=".json", delete=False)
+    # json_data_file = NamedTemporaryFile(suffix=".json", delete=False)
     # Path(json_data_file.name).write_text(json.dumps(data_yosys, indent=4))
     # pp(json_data_file.name)
 
@@ -222,10 +224,8 @@ def simple_synth_check_yosys(
     extra_data_files: list[Path] | None = None,
 ) -> bool:
     temp_inputs = []
-    temp_dir = tempfile.TemporaryDirectory()
+    temp_dir = TemporaryDirectory()
     temp_dir_name = temp_dir.name
-    # temp_dir = tempfile.mkdtemp()
-    # temp_dir_name = temp_dir
 
     for source_name, source in sources.items():
         temp_input = Path(temp_dir_name) / source_name
@@ -347,8 +347,8 @@ RE_MODULE = re.compile(r"module(.|\s)*?endmodule", re.MULTILINE)
 def yosys_read_module(module_str: str) -> dict:
     # read the module string into a Yosys and dump the JSON data
 
-    input_file = tempfile.NamedTemporaryFile(suffix=".v")
-    output_file = tempfile.NamedTemporaryFile(suffix=".json")
+    input_file = NamedTemporaryFile(suffix=".v")
+    output_file = NamedTemporaryFile(suffix=".json")
 
     Path(input_file.name).write_text(module_str, encoding="utf-8")
 
@@ -757,6 +757,6 @@ def auto_top(
     db = auto_top_helper.scores_huristic
     db_sorted = sorted(db.items(), key=operator.itemgetter(1), reverse=True)
     if len(db_sorted) > 1 and db_sorted[0][1] == db_sorted[1][1]:
-        raise RuntimeError("Multiple top modules with same heuristic score")
+        raise RuntimeError(f"Multiple top modules with same heuristic score\n{db_sorted}\n{source_files}")
     auto_top_module = max(db.items(), key=operator.itemgetter(1))[0]
     return auto_top_module
