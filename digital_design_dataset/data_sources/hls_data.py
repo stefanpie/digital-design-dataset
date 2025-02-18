@@ -1,13 +1,8 @@
-import io
-import json
-import shutil
 import tarfile
 import zipfile
 from typing import ClassVar
 
-import requests
-
-from digital_design_dataset.data_sources.data_retrievers import DataRetriever, get_file_download_url_from_github
+from digital_design_dataset.data_sources.data_retrievers import DataRetriever
 from digital_design_dataset.data_sources.github_fast_downloader import GithubFastDownloader
 from digital_design_dataset.design_dataset import build_design_scaffolding
 

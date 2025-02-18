@@ -1,6 +1,5 @@
 import json
 import operator
-import os
 import re
 import shutil
 from collections import Counter
@@ -37,7 +36,7 @@ class DirectoryNotEmptyError(FileExistsError):
 def make_dir_if_not_empty(path: Path) -> None:
     if not path.exists():
         path.mkdir(parents=True, exist_ok=True)
-    elif len(os.listdir(path)) > 0:
+    elif any(path.iterdir()):
         raise DirectoryNotEmptyError(
             "Directory is not empty. Support for partially constructed datasets is not implemented yet.",
         )
@@ -103,7 +102,7 @@ def build_design_scaffolding(
     dataset_tags: list[str],
     sources_dir_name: str = "sources",
     metadata_filename: str = "design.json",
-):
+) -> DesignScaffoldingOutput:
     design_name = f"{design_name_prefix}__{design_name_base}"
     design_dir_fp = build_individual_design_dir(dataset_designs_dir, design_name)
     metadata, metadata_fp = build_metadata(

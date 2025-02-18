@@ -603,7 +603,7 @@ def decompose_design_text(
     for module_name in final_module_names:
         final_module_data[module_name]["submodules"] = set()
 
-    for module_name in data_yosys["modules"].keys():
+    for module_name in data_yosys["modules"]:
         module_cells = data_yosys["modules"][module_name]["cells"]
         module_cells = {k: v for k, v in module_cells.items() if v["type"] in data_yosys["modules"]}
         module_cells_type = [v["type"] for v in module_cells.values()]
@@ -659,7 +659,7 @@ def decompose_design_text(
 
         for source_fp_name in sub_design_sources[top_node]:
             txt = sub_design_sources[top_node][source_fp_name]
-            if txt.strip() == "":
+            if txt.strip() == "":  # noqa: PLC1901
                 txt = txt.strip()
                 continue
             txt = txt.rstrip("\n") + "\n"

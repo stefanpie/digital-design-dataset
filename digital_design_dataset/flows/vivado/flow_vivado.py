@@ -12,7 +12,6 @@ from digital_design_dataset.design_dataset import VERILOG_SOURCE_EXTENSIONS_SET,
 from digital_design_dataset.flows.decompose import (
     auto_top,
     compute_hierarchy_redundent,
-    compute_top_modules,
     get_top_nodes,
 )
 from digital_design_dataset.flows.flow_tools import check_process_output, get_bin

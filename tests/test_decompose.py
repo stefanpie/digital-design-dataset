@@ -50,8 +50,8 @@ if not n_jobs_val:
     raise ValueError("N_JOBS not defined in .env file")
 try:
     n_jobs = int(n_jobs_val)
-except ValueError:
-    raise ValueError("N_JOBS must be an integer")
+except ValueError as e:
+    raise ValueError("N_JOBS must be an integer") from e
 if n_jobs < 1:
     raise ValueError("N_JOBS must be greater than 0")
 
@@ -271,7 +271,7 @@ def test_single_top__opencores():
         else:
             score_diff = abs(db_sorted[0][1] - db_sorted[1][1])
 
-            if score_diff > 0.5:
+            if score_diff > 0.5:  # noqa: PLR2004
                 top_node = db_sorted[0][0]
                 print(f"Computed based on differential: {db_sorted=}")
             elif len(set(db_n_nodes.values())) > 1:

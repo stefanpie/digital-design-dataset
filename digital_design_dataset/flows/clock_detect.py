@@ -9,7 +9,7 @@ from typing import Any, ClassVar
 
 from joblib import Parallel, delayed
 
-from digital_design_dataset.design_dataset import HARDWARE_DATA_TEXT_EXTENSIONS_SET, VERILOG_SOURCE_EXTENSIONS_SET
+from digital_design_dataset.design_dataset import HARDWARE_DATA_TEXT_EXTENSIONS_SET
 from digital_design_dataset.flows.decompose import auto_top
 from digital_design_dataset.flows.flows import Flow
 

@@ -101,6 +101,7 @@ def yosys_simple_synth(
         capture_output=True,
         text=True,
         check=False,
+        bufsize=-1,
     )
     if p.returncode != 0:
         raise RuntimeError(

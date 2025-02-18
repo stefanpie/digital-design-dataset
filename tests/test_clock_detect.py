@@ -7,11 +7,9 @@ from dotenv import dotenv_values
 
 from digital_design_dataset.data_sources.data_retrievers import OpencoresDatasetRetriever
 from digital_design_dataset.design_dataset import (
-    HARDWARE_DATA_TEXT_EXTENSIONS_SET,
-    VERILOG_SOURCE_EXTENSIONS_SET,
     DesignDataset,
 )
-from digital_design_dataset.flows.clock_detect import ClockDetectFlow, detect_clocks
+from digital_design_dataset.flows.clock_detect import ClockDetectFlow
 
 DIR_CURRENT = Path(__file__).parent
 
@@ -40,8 +38,8 @@ if not n_jobs_val:
     raise ValueError("N_JOBS not defined in .env file")
 try:
     n_jobs = int(n_jobs_val)
-except ValueError:
-    raise ValueError("N_JOBS must be an integer")
+except ValueError as e:
+    raise ValueError("N_JOBS must be an integer") from e
 if n_jobs < 1:
     raise ValueError("N_JOBS must be greater than 0")
 

@@ -1,6 +1,5 @@
 import logging
 import multiprocessing
-import operator
 from pathlib import Path
 
 import pytest
@@ -12,14 +11,6 @@ from digital_design_dataset.data_sources.data_retrievers import (
     OpencoresDatasetRetriever,
 )
 from digital_design_dataset.design_dataset import DesignDataset
-
-# from digital_design_dataset.flows.quartus.flow_quartus import (
-#     AlteraQuartusFlow,
-#     FlowSettingsAlteraQuartus,
-#     PartAltera,
-#     ToolBinsAlteraQuartus,
-#     get_supported_devices_raw,
-# )
 from digital_design_dataset.flows.vivado.flow_vivado import (
     FlowSettingsXilinxVivado,
     PartXilinx,

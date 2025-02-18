@@ -13,13 +13,29 @@ keywords = [
     "Digital Design",
 ]
 classifiers = []
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 
-dependencies = []
+
+dependencies = [
+    "numpy",
+    "scipy",
+    "networkx",
+    "scikit-learn",
+    "matplotlib",
+    "pandas",
+    "seaborn",
+    "jupyter",
+    "pygithub",
+    "py7zr",
+    "tqdm",
+    "joblib",
+    "python-dotenv",
+]
 
 [project.optional-dependencies]
 docs = ["sphinx", "furo", "sphinx-autodoc-typehints"]
 test = ["pytest"]
+dev = ["ruff", "mypy"]
 
 [project.urls]
 "Homepage" = "https://github.com/stefanpie/digital-design-dataset?tab=readme-ov-file"
@@ -74,7 +90,12 @@ ignore = [
     "S607",
     "PLR0914",
     "G004",
+    "SIM108",
 ]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "T201", "ANN201"]
+
 
 [tool.mypy]
 ignore_missing_imports = true
