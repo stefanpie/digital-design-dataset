@@ -48,9 +48,9 @@ dev = ["ruff", "mypy"]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools]
-packages = ["digital_design_dataset"]
-
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["digital_design_dataset*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
