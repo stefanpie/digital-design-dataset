@@ -2,7 +2,8 @@
 name = "digital-design-dataset"
 version = "0.0.1"
 readme = "README.md"
-license = { file = "LICENSE" }
+license = "BSD-3-Clause AND CC-BY-4.0"
+license-files = ["LICENSE", "LICENSE.software", "LICENSE.data"]
 authors = [{ name = "Stefan Abi-Karam", email = "stefanabikaram@gatech.edu" }]
 keywords = [
     "FPGA",
@@ -38,9 +39,9 @@ test = ["pytest"]
 dev = ["ruff", "mypy"]
 
 [project.urls]
-"Homepage" = "https://github.com/stefanpie/digital-design-dataset?tab=readme-ov-file"
-"Repository" = "https://github.com/stefanpie/digital-design-dataset?tab=readme-ov-file"
-"Documentation" = "https://github.com/stefanpie/digital-design-dataset?tab=readme-ov-file"
+"Homepage" = "https://github.com/stefanpie/digital-design-dataset"
+"Repository" = "https://github.com/stefanpie/digital-design-dataset"
+"Documentation" = "https://github.com/stefanpie/digital-design-dataset"
 
 
 [build-system]
