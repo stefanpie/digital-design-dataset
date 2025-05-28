@@ -45,7 +45,7 @@ class LineCountFlow(Flow):
     def build_flow_single(
         self,
         design: dict[str, Any],
-        _overwrite: bool = False,
+        overwrite: bool = False,
     ) -> None:
         # count number of lines in a design
         design_dir = self.design_dataset.designs_dir / design["design_name"]
@@ -242,7 +242,7 @@ class YosysSimpleSynthFlow(Flow):
         rtlil_pre_fp = flow_dir / "design__pre.rtlil"
         rtlil_pre_fp.write_text(rtlil_pre_raw)
 
-        aig_graph_json = nx.node_link_data(aig_graph)
+        aig_graph_json = nx.node_link_data(aig_graph, edges="edges")
         aig_graph_fp = flow_dir / "aig_graph.json"
         aig_graph_fp.write_text(json.dumps(aig_graph_json, indent=4))
 

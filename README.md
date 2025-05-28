@@ -38,7 +38,7 @@ This work is pursued by Stefan Abi-Karam ([stefanabikaram@gatech.edu](mailto:ste
 - ✅ OS - mongrelgem/Verilog-Adder
 - 〰️ OS - taneroksuz/fpu
 - 〰️ OS - alexforencich/* Cores
-<br>
+<br/>
 - ✅ Bench - HW2VEC
 - ✅ Bench - OpenPiton Design Benchmark
 - ✅ Bench - Verilog to Routing (VTR)
@@ -55,7 +55,7 @@ This work is pursued by Stefan Abi-Karam ([stefanabikaram@gatech.edu](mailto:ste
 - 🏗️ Bench - IWLS 2005: Gaisler Subset
 - ✅ Bench - EPFL Combinational Benchmark
 - 🏗️ Bench - HDLBits / VerilogEval Subset
-<br>
+<br/>
 - ✅ HLS - PolyBench
 - 🏗️ HLS - Machsuite
 - 🏗️ HLS - Rosetta
@@ -63,14 +63,14 @@ This work is pursued by Stefan Abi-Karam ([stefanabikaram@gatech.edu](mailto:ste
 - 🏗️ HLS - Rodina
 - 🏗️ HLS - Parallel Programming For FPGAs
 - 🏗️ HLS - Xilinx/Vitis-HLS-Introductory-Examples
-<br>
+<br/>
 - ✅ Exp - Regex State Machines
 - 〰️ Exp - Scraped Efabless Submissions
-<br>
+<br/>
 - 〰️ DSL / Arch - PGRA
 - 〰️ DSL / Arch - OpenFPGA
 - 〰️ DSL / Arch - FloPoCo
-<br>
+<br/>
 - ✅ Demo - Espresso PLA
 - ✅ Demo - XACT Designs
 
