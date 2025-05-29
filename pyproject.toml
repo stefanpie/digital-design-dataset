@@ -31,6 +31,8 @@ dependencies = [
     "tqdm",
     "joblib",
     "python-dotenv",
+    "pydantic>=2.11.5",
+    "tiktoken>=0.9.0",
 ]
 
 [project.optional-dependencies]
@@ -92,6 +94,8 @@ ignore = [
     "PLR0914",
     "G004",
     "SIM108",
+    "COM812",
+    "ISC001",
 ]
 
 [tool.ruff.lint.per-file-ignores]

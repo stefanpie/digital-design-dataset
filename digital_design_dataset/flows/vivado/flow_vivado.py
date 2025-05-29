@@ -5,6 +5,7 @@ import subprocess
 from pathlib import Path
 from typing import Any, ClassVar
 
+import tqdm
 from joblib import Parallel, delayed
 from pydantic import BaseModel, Field
 
@@ -156,7 +157,7 @@ class XilinxVivadoFlow(Flow):
         vivado_script += "report_power -file power_report_impl.rpt\n"
 
         # Optional: Write bitstream if needed
-        # vivado_script += "write_bitstream -force design.bit\n"
+        vivado_script += "write_bitstream -force design.bit\n"
 
         vivado_script += "exit\n"
 

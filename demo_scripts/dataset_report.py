@@ -53,6 +53,8 @@ if "DB_PATH" in env_config:
         raise ValueError(
             f"An error occurred while parsing the DB_PATH string into a Path object:\n{e!s}",
         ) from e
+else:
+    raise ValueError("DB_PATH key is missing in the .env file")
 
 dd = DesignDataset(
     db_path,
@@ -83,8 +85,8 @@ def build_dataset_designs(design_dataset: DesignDataset) -> pd.DataFrame:
 def count_non_whitespace_chars(fp: Path) -> int:
     try:
         txt = fp.read_text()
-    except UnicodeDecodeError:
-        raise ValueError(f"Error reading file: {fp}")
+    except UnicodeDecodeError as e:
+        raise ValueError(f"Error reading file: {fp}") from e
     txt_no_whitespace = "".join(txt.split())
     return len(txt_no_whitespace)
 
@@ -128,7 +130,7 @@ def build_dataset_files(design_dataset: DesignDataset) -> pd.DataFrame:
 def analyze_design_sources_simple(
     design_dataset: DesignDataset,
     df_dataset_files: pd.DataFrame,
-):
+) -> pd.DataFrame:
     df_source_code_analysis = df_dataset_files.copy()
 
     print("Counting non-whitespace characters")
@@ -201,7 +203,7 @@ def analyze_design_sources_embedding(
     # fit vectorizer
     print("Fitting vectorizer")
     X_sparse = vectorizer.fit_transform(tqdm.tqdm(files))
-    X_dense = X_sparse.toarray()
+    X_dense = X_sparse.todense()
 
     projection_data = {}
     projection_data["dataset_names"] = dataset_names
@@ -332,7 +334,7 @@ def build_report(
     df_source_analysis_simple: pd.DataFrame | None = None,
     df_source_analysis_tokenization: pd.DataFrame | None = None,
     source_analysis_embedding_data: dict | None = None,
-):
+) -> None:
     if report_output_dir.exists():
         shutil.rmtree(report_output_dir)
     report_output_dir.mkdir()

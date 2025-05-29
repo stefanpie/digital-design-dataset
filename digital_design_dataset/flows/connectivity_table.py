@@ -31,21 +31,21 @@ def parse_connectivity_table(connectivity_table: str) -> nx.DiGraph:
         G.add_node(row["signal"], node_type="signal")
     for _, row in df.iterrows():
         direction = row["direction"]
-        if direction == "in" or direction == "pi":
+        if direction in {"in", "pi"}:
             G.add_edge(
                 row["signal"],
                 row["cell_name"],
                 cell_port=row["cell_port"],
                 direction=row["direction"],
             )
-        elif direction == "out" or direction == "po":
+        elif direction in {"out", "po"}:
             G.add_edge(
                 row["cell_name"],
                 row["signal"],
                 cell_port=row["cell_port"],
                 direction=row["direction"],
             )
-        elif direction == "inout" or direction == "pio":
+        elif direction in {"inout", "pio"}:
             G.add_edge(
                 row["signal"],
                 row["cell_name"],

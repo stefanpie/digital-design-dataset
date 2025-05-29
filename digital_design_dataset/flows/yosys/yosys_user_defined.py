@@ -20,7 +20,7 @@ class YosysUserDefinedFlow(Flow):
         self,
         design_dataset: DesignDataset,
         yosys_bin: str = "yosys",
-        script_template: str | jinja2.Template | None = None,
+        script_template: str | jinja2.Template | Path | None = None,
     ) -> None:
         super().__init__(design_dataset)
         self.yosys_bin = yosys_bin
@@ -28,6 +28,11 @@ class YosysUserDefinedFlow(Flow):
             self.script_template = jinja2.Template(script_template)
         elif isinstance(script_template, jinja2.Template):
             self.script_template = script_template
+        elif isinstance(script_template, Path):
+            if script_template.exists() and script_template.is_file():
+                self.script_template = jinja2.Template(script_template.read_text())
+            else:
+                raise FileNotFoundError(f"Script template file {script_template} does not exist or is not a file.")
         else:
             self.script_template = jinja2.Template("")
 

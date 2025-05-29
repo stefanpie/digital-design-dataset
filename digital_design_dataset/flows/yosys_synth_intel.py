@@ -9,7 +9,7 @@ from networkx.classes.digraph import DiGraph
 from digital_design_dataset.flows.connectivity_table import parse_connectivity_table
 
 
-def yosys_synth_xilinx(
+def yosys_synth_intel(
     verilog_files: list[Path],
     flow_dir: Path,
     yosys_bin: str = "yosys",
@@ -18,12 +18,12 @@ def yosys_synth_xilinx(
     tempdir_fp = Path(tempdir.name)
 
     connectivity_table_temp_file = tempdir_fp / "connectivity_table.txt"
-    json_temp_file = tempdir_fp / "synth_xilinx.json"
-    verilog_temp_file = tempdir_fp / "synth_xilinx.v"
-    stat_temp_file = tempdir_fp / "synth_xilinx.stat"
-    stat_json_temp_file = tempdir_fp / "synth_xilinx.stat.json"
-    rtlil_pre_temp_file = tempdir_fp / "synth_xilinx_pre.rtlil"
-    rtlil_temp_file = tempdir_fp / "synth_xilinx.rtlil"
+    json_temp_file = tempdir_fp / "synth_intel.json"
+    verilog_temp_file = tempdir_fp / "synth_intel.v"
+    stat_temp_file = tempdir_fp / "synth_intel.stat"
+    stat_json_temp_file = tempdir_fp / "synth_intel.stat.json"
+    rtlil_pre_temp_file = tempdir_fp / "synth_intel_pre.rtlil"
+    rtlil_temp_file = tempdir_fp / "synth_intel.rtlil"
 
     log_fp = flow_dir / "yosys_log.txt"
 
@@ -33,7 +33,7 @@ def yosys_synth_xilinx(
         script += f"read_verilog {verilog_file.resolve()};\n"
     script += "hierarchy -check -auto-top;\n"
     script += f"write_rtlil {rtlil_pre_temp_file.resolve()};\n"
-    script += "synth_xilinx -family xc7;\n"
+    script += "synth_intel -family max10;\n"
     script += "opt; clean;\n"
     script += f"write_table {connectivity_table_temp_file.resolve()};\n"
     script += f"write_json {json_temp_file.resolve()};\n"

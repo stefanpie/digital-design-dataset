@@ -41,7 +41,7 @@ def flow_ise(
 
     # Step 1: Synthesize (xst)
     synth_command = [
-        os.path.join(ise_bin_path, "xst"),
+        ise_bin_path / "xst",
         "-ifn",
         f"{build_dir / 'synth.tcl'}",
     ]
@@ -55,16 +55,15 @@ def flow_ise(
     -top {top_module}
     -p {part_name}
     """
-    with open(build_dir / "synth.tcl", "w") as f:
-        f.write(synth_tcl_content)
+
+    (build_dir / "synth.tcl").write_text(synth_tcl_content)
 
     if run_command(synth_command, build_dir / "synth.log") != 0:
-        print("Synthesis failed. Check synth.log for details.")
-        return
+        raise RuntimeError("Synthesis failed. Check synth.log for details.")
 
     # Step 2: Translate (ngdbuild)
     ngdbuild_command = [
-        os.path.join(ise_bin_path, "ngdbuild"),
+        ise_bin_path / "ngdbuild",
         "-uc",
         str(ucf_file),
         "-p",
@@ -73,12 +72,11 @@ def flow_ise(
         str(ngd_file),
     ]
     if run_command(ngdbuild_command, build_dir / "ngdbuild.log") != 0:
-        print("NGDBuild failed. Check ngdbuild.log for details.")
-        return
+        raise RuntimeError("NGDBuild failed. Check ngdbuild.log for details.")
 
     # Step 3: Map (map)
     map_command = [
-        os.path.join(ise_bin_path, "map"),
+        ise_bin_path / "map",
         "-p",
         part_name,
         "-o",
@@ -86,28 +84,25 @@ def flow_ise(
         str(ngd_file),
     ]
     if run_command(map_command, build_dir / "map.log") != 0:
-        print("Map failed. Check map.log for details.")
-        return
+        raise RuntimeError("Map failed. Check map.log for details.")
 
     # Step 4: Place and Route (par)
     par_command = [
-        os.path.join(ise_bin_path, "par"),
+        ise_bin_path / "par",
         "-w",  # Enable warning messages
         str(ncd_file),
         str(ncd_file),
     ]
     if run_command(par_command, build_dir / "par.log") != 0:
-        print("Place and Route failed. Check par.log for details.")
-        return
+        raise RuntimeError("Place and Route failed. Check par.log for details.")
 
     # Step 5: Bitstream Generation (bitgen)
     bitgen_command = [
-        os.path.join(ise_bin_path, "bitgen"),
+        ise_bin_path / "bitgen",
         str(ncd_file),
         str(bit_file),
     ]
     if run_command(bitgen_command, build_dir / "bitgen.log") != 0:
-        print("Bitstream generation failed. Check bitgen.log for details.")
-        return
+        raise RuntimeError("Bitstream generation failed. Check bitgen.log for details.")
 
     print(f"FPGA flow completed successfully. Bitstream file: {bit_file}")

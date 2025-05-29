@@ -26,8 +26,8 @@ if not n_jobs_val:
     raise ValueError("N_JOBS not defined in .env file")
 try:
     n_jobs = int(n_jobs_val)
-except ValueError:
-    raise ValueError("N_JOBS must be an integer")
+except ValueError as e:
+    raise ValueError("N_JOBS must be an integer") from e
 if n_jobs < 1:
     raise ValueError("N_JOBS must be greater than 0")
 
@@ -38,9 +38,10 @@ if "DB_PATH" in env_config:
         raise ValueError("DB_PATH not defined in .env file")
     try:
         db_path = Path(db_path_val)
-    except Exception as e:
-        raise ValueError(f"An error occurred while processing DB_PATH: {e!s}")
-
+    except FileNotFoundError as e:
+        raise ValueError(f"An error occurred while processing DB_PATH: {e!s}") from e
+else:
+    raise ValueError("DB_PATH not defined in .env file")
 
 test_dataset = DesignDataset(
     db_path,
@@ -85,14 +86,14 @@ RE_C_COMMENT = re.compile(
 )
 
 
-def comment_replacer(match):
+def comment_replacer(match: re.Match) -> str:
     s = match.group(0)
     if s.startswith("/"):
         return " "  # note: a space and not an empty string
     return s
 
 
-def comment_remover(text):
+def comment_remover(text: str) -> str:
     return re.sub(RE_C_COMMENT, comment_replacer, text)
 
 
@@ -103,7 +104,7 @@ def hash_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def hash_modules_from_file(fp: Path, design_name: str, dataset_name: str):
+def hash_modules_from_file(fp: Path, design_name: str, dataset_name: str) -> list[dict]:
     source = fp.read_text()
     source_no_comments = comment_remover(source)
 
@@ -155,11 +156,11 @@ print(df["design_name"].nunique())
 # count lines of code
 def count_lines_of_code(text: str) -> int:
     lines = text.split("\n")
-    lines_not_empty = [line for line in lines if line.strip() != ""]
+    lines_not_empty = [line for line in lines if line.strip()]
     return len(lines_not_empty)
 
 
-def total_lines_of_code(corpus_fps):
+def total_lines_of_code(corpus_fps: list[Path]) -> int:
     total_lines = 0
     for fp in corpus_fps:
         total_lines += count_lines_of_code(fp.read_text())
@@ -172,7 +173,7 @@ print(total_lines)
 
 
 # count the file sizes
-def total_file_sizes(corpus_fps):
+def total_file_sizes(corpus_fps: list[Path]) -> int:
     total_size = 0
     for fp in corpus_fps:
         total_size += fp.stat().st_size

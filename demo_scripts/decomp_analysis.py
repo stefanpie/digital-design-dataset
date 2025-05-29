@@ -24,8 +24,8 @@ if not n_jobs_val:
     raise ValueError("N_JOBS not defined in .env file")
 try:
     n_jobs = int(n_jobs_val)
-except ValueError:
-    raise ValueError("N_JOBS must be an integer")
+except ValueError as e:
+    raise ValueError("N_JOBS must be an integer") from e
 if n_jobs < 1:
     raise ValueError("N_JOBS must be greater than 0")
 
@@ -37,7 +37,9 @@ if "DB_PATH" in env_config:
     try:
         db_path = Path(db_path_val)
     except Exception as e:
-        raise ValueError(f"An error occurred while processing DB_PATH: {e!s}")
+        raise ValueError(f"An error occurred while processing DB_PATH: {e!s}") from e
+else:
+    raise ValueError("DB_PATH not defined in .env file")
 
 
 test_dataset = DesignDataset(
@@ -48,7 +50,7 @@ test_dataset = DesignDataset(
 opencores_designs = test_dataset.get_design_metadata_by_dataset_name("opencores")
 
 
-def process_design(design):
+def process_design(design: dict):
     design_name = design["design_name"]
     design_dir = test_dataset.designs_dir / design_name
 
@@ -73,7 +75,7 @@ def process_design(design):
 data_decomp: list = Parallel(n_jobs=n_jobs)(delayed(process_design)(design) for design in tqdm.tqdm(opencores_designs))
 
 num_original_designs = len(opencores_designs)
-num_sub_designs = sum([data["num_sub_designs"] for data in data_decomp])
+num_sub_designs = sum(data["num_sub_designs"] for data in data_decomp)
 
 
 print(f"Original designs: {num_original_designs}")

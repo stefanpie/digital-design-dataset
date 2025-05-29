@@ -6,6 +6,7 @@ from pathlib import Path
 from dotenv import dotenv_values
 
 from digital_design_dataset.data_sources.hls_data import PolybenchRetriever
+from tests.utils import load_common_test_env_vars
 
 try:
     from pytest_cov.embed import cleanup_on_sigterm
@@ -48,32 +49,7 @@ DIR_CURRENT = Path(__file__).parent
 
 # load config data
 env_config = dotenv_values(DIR_CURRENT / ".env")
-
-# load github token
-gh_token = None
-if "GITHUB_TOKEN" in env_config:
-    gh_token = env_config["GITHUB_TOKEN"]
-
-# load test path
-if "TEST_DIR" not in env_config:
-    raise ValueError("TEST_DIR not defined in .env file")
-test_path_val = env_config["TEST_DIR"]
-if not test_path_val:
-    raise ValueError("TEST_DIR not defined in .env file")
-test_path = Path(test_path_val)
-
-# load n_jobs
-if "N_JOBS" not in env_config:
-    raise ValueError("N_JOBS not defined in .env file")
-n_jobs_val = env_config["N_JOBS"]
-if not n_jobs_val:
-    raise ValueError("N_JOBS not defined in .env file")
-try:
-    n_jobs = int(n_jobs_val)
-except ValueError as e:
-    raise ValueError("N_JOBS must be an integer") from e
-if n_jobs < 1:
-    raise ValueError("N_JOBS must be greater than 0")
+gh_token, test_path, n_jobs = load_common_test_env_vars(DIR_CURRENT / ".env")
 
 
 # load design dataset

@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -24,8 +25,8 @@ if not n_jobs_val:
     raise ValueError("N_JOBS not defined in .env file")
 try:
     n_jobs = int(n_jobs_val)
-except ValueError:
-    raise ValueError("N_JOBS must be an integer")
+except ValueError as e:
+    raise ValueError("N_JOBS must be an integer") from e
 if n_jobs < 1:
     raise ValueError("N_JOBS must be greater than 0")
 
@@ -37,7 +38,9 @@ if "DB_PATH" in env_config:
     try:
         db_path = Path(db_path_val)
     except Exception as e:
-        raise ValueError(f"An error occurred while processing DB_PATH: {e!s}")
+        raise ValueError(f"An error occurred while processing DB_PATH: {e!s}") from e
+else:
+    raise ValueError("DB_PATH not defined in .env file")
 
 
 test_dataset = DesignDataset(
@@ -56,7 +59,7 @@ for design in test_dataset.index:
         design_names.append(design["design_name"])
         dataset_names.append(design["dataset_name"])
 
-encoders = {
+encoders: dict[str, tiktoken.Encoding] = {
     "cl100k_base": tiktoken.get_encoding("cl100k_base"),
     "o200k_base": tiktoken.get_encoding("o200k_base"),
 }
@@ -77,13 +80,12 @@ def compute_tokens(
     return num_tokens
 
 
-for e in encoders:
+for e_name, encoder in encoders.items():
     all_data = zip(corpus_fps, design_names, dataset_names, strict=False)
 
     # use joblib
-    token_counts[e] = Parallel(n_jobs=n_jobs, backend="threading")(  # type: ignore
-        delayed(compute_tokens)(fp, design_name, dataset_name, encoders[e])
-        for fp, design_name, dataset_name in all_data
+    token_counts[e_name] = Parallel(n_jobs=n_jobs, backend="threading")(  # type: ignore
+        delayed(compute_tokens)(fp, design_name, dataset_name, encoder) for fp, design_name, dataset_name in all_data
     )
 
 df_tokens = pd.DataFrame(

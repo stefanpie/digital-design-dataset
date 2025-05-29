@@ -15,6 +15,8 @@ from digital_design_dataset.design_dataset import (
 from digital_design_dataset.flows.design_hierarchy import extract_design_hierarchy
 from digital_design_dataset.flows.verilog_ast import verilog_ast
 from digital_design_dataset.flows.yosys_aig import yosys_aig, yosys_simple_synth
+from digital_design_dataset.flows.yosys_synth_intel import yosys_synth_intel
+from digital_design_dataset.flows.yosys_synth_lattice import yosys_synth_lattice
 from digital_design_dataset.flows.yosys_synth_xilinx import yosys_synth_xilinx
 from digital_design_dataset.logger import build_logger
 
@@ -183,7 +185,7 @@ class VeribleASTFlow(Flow):
             if g_ast is None:
                 raise ValueError(f"FAILED to parse {source_fp}")
 
-            g_ast_json = nx.node_link_data(g_ast)
+            g_ast_json = nx.node_link_data(g_ast, edges="edges")
             g_ast_fp = flow_dir / (source_fp.stem + ".ast.json")
             g_ast_fp.write_text(json.dumps(g_ast_json, indent=4))
 
@@ -207,7 +209,7 @@ class YosysSimpleSynthFlow(Flow):
     ) -> None:
         design_name = design["design_name"]
         if not isinstance(design_name, str):
-            raise ValueError(f"design_name must be a string, got {design_name}")
+            raise TypeError(f"design_name must be a string, got {type(design_name)}:{design_name}")
 
         design_dir = self.design_dataset.designs_dir / design_name
         sources_dir = design_dir / "sources"
@@ -309,7 +311,7 @@ class YosysAIGFlow(Flow):
             sources_fps,
             yosys_bin=self.yosys_bin,
         )
-        aig_graph_json = nx.node_link_data(aig_graph)
+        aig_graph_json = nx.node_link_data(aig_graph, edges="edges")
         aig_graph_fp = flow_dir / "aig_graph.json"
         aig_graph_fp.write_text(json.dumps(aig_graph_json, indent=4))
 
@@ -347,7 +349,7 @@ class YosysXilinxSynthFlow(Flow):
     ) -> None:
         design_name = design["design_name"]
         if not isinstance(design_name, str):
-            raise ValueError(f"design_name must be a string, got {design_name}")
+            raise TypeError(f"design_name must be a string, got {type(design_name)}:{design_name}")
 
         design_dir = self.design_dataset.designs_dir / design_name
         sources_dir = design_dir / "sources"
@@ -382,7 +384,159 @@ class YosysXilinxSynthFlow(Flow):
         rtlil_pre_fp = flow_dir / "design__pre.rtlil"
         rtlil_pre_fp.write_text(rtlil_pre_raw)
 
-        aig_graph_json = nx.node_link_data(aig_graph)
+        aig_graph_json = nx.node_link_data(aig_graph, edges="edges")
+        aig_graph_fp = flow_dir / "aig_graph.json"
+        aig_graph_fp.write_text(json.dumps(aig_graph_json, indent=4))
+
+        aig_yosys_json_fp = flow_dir / "aig_yosys.json"
+        aig_yosys_json_fp.write_text(json.dumps(json_data, indent=4))
+
+        verilog_raw_fp = flow_dir / "aig_verilog.v"
+        verilog_raw_fp.write_text(verilog_raw)
+
+        rtlil_fp = flow_dir / "design.rtlil"
+        rtlil_fp.write_text(rtlil_raw)
+
+        stat_txt_fp = flow_dir / "stat.txt"
+        stat_txt_fp.write_text(stat_txt)
+
+        stat_json_fp = flow_dir / "stat.json"
+        stat_json_fp.write_text(json.dumps(stat_json, indent=4))
+
+    def build_flow(self, overwrite: bool = False, n_jobs: int = 1) -> None:
+        designs = self.design_dataset.index
+        Parallel(n_jobs=n_jobs, backend="loky")(
+            delayed(self.build_flow_single)(design, overwrite=overwrite) for design in tqdm.tqdm(designs)
+        )
+
+
+class YosysIntelSynthFlow(Flow):
+    flow_name: str = "yosys_intel_synth"
+    flow_tags: ClassVar[list[str]] = ["synthesis"]
+
+    def __init__(self, design_dataset: DesignDataset, yosys_bin: str = "yosys") -> None:
+        super().__init__(design_dataset)
+        self.yosys_bin = yosys_bin
+
+    def build_flow_single(
+        self,
+        design: dict[str, Any],
+        overwrite: bool = False,
+    ) -> None:
+        design_name = design["design_name"]
+        if not isinstance(design_name, str):
+            raise TypeError(f"design_name must be a string, got {type(design_name)}:{design_name}")
+
+        design_dir = self.design_dataset.designs_dir / design_name
+        sources_dir = design_dir / "sources"
+        sources_fps = [f for f in sources_dir.iterdir() if f.is_file()]
+        sources_fps = [f for f in sources_fps if f.suffix in VERILOG_SOURCE_EXTENSIONS_SET]
+
+        flow_dir = design_dir / "flows" / self.flow_name
+        if flow_dir.exists():
+            shutil.rmtree(flow_dir)
+        flow_dir.mkdir(parents=True, exist_ok=True)
+
+        design_metadata_fp = design_dir / "design.json"
+        with design_metadata_fp.open() as f:
+            design_metadata = json.load(f)
+
+        if "flows" not in design_metadata:
+            design_metadata["flows"] = {}
+
+        flow_metadata = {}
+        flow_metadata["flow_name"] = self.flow_name
+        flow_metadata["flow_tags"] = self.flow_tags
+        design_metadata["flows"][self.flow_name] = flow_metadata
+
+        design_metadata_fp.write_text(json.dumps(design_metadata, indent=4))
+
+        rtlil_pre_raw, aig_graph, json_data, verilog_raw, rtlil_raw, stat_txt, stat_json = yosys_synth_intel(
+            sources_fps,
+            flow_dir,
+            yosys_bin=self.yosys_bin,
+        )
+
+        rtlil_pre_fp = flow_dir / "design__pre.rtlil"
+        rtlil_pre_fp.write_text(rtlil_pre_raw)
+
+        aig_graph_json = nx.node_link_data(aig_graph, edges="edges")
+        aig_graph_fp = flow_dir / "aig_graph.json"
+        aig_graph_fp.write_text(json.dumps(aig_graph_json, indent=4))
+
+        aig_yosys_json_fp = flow_dir / "aig_yosys.json"
+        aig_yosys_json_fp.write_text(json.dumps(json_data, indent=4))
+
+        verilog_raw_fp = flow_dir / "aig_verilog.v"
+        verilog_raw_fp.write_text(verilog_raw)
+
+        rtlil_fp = flow_dir / "design.rtlil"
+        rtlil_fp.write_text(rtlil_raw)
+
+        stat_txt_fp = flow_dir / "stat.txt"
+        stat_txt_fp.write_text(stat_txt)
+
+        stat_json_fp = flow_dir / "stat.json"
+        stat_json_fp.write_text(json.dumps(stat_json, indent=4))
+
+    def build_flow(self, overwrite: bool = False, n_jobs: int = 1) -> None:
+        designs = self.design_dataset.index
+        Parallel(n_jobs=n_jobs, backend="loky")(
+            delayed(self.build_flow_single)(design, overwrite=overwrite) for design in tqdm.tqdm(designs)
+        )
+
+
+class YosysLatticeSynthFlow(Flow):
+    flow_name: str = "yosys_lattice_synth"
+    flow_tags: ClassVar[list[str]] = ["synthesis"]
+
+    def __init__(self, design_dataset: DesignDataset, yosys_bin: str = "yosys") -> None:
+        super().__init__(design_dataset)
+        self.yosys_bin = yosys_bin
+
+    def build_flow_single(
+        self,
+        design: dict[str, Any],
+        overwrite: bool = False,
+    ) -> None:
+        design_name = design["design_name"]
+        if not isinstance(design_name, str):
+            raise TypeError(f"design_name must be a string, got {type(design_name)}:{design_name}")
+
+        design_dir = self.design_dataset.designs_dir / design_name
+        sources_dir = design_dir / "sources"
+        sources_fps = [f for f in sources_dir.iterdir() if f.is_file()]
+        sources_fps = [f for f in sources_fps if f.suffix in VERILOG_SOURCE_EXTENSIONS_SET]
+
+        flow_dir = design_dir / "flows" / self.flow_name
+        if flow_dir.exists():
+            shutil.rmtree(flow_dir)
+        flow_dir.mkdir(parents=True, exist_ok=True)
+
+        design_metadata_fp = design_dir / "design.json"
+        with design_metadata_fp.open() as f:
+            design_metadata = json.load(f)
+
+        if "flows" not in design_metadata:
+            design_metadata["flows"] = {}
+
+        flow_metadata = {}
+        flow_metadata["flow_name"] = self.flow_name
+        flow_metadata["flow_tags"] = self.flow_tags
+        design_metadata["flows"][self.flow_name] = flow_metadata
+
+        design_metadata_fp.write_text(json.dumps(design_metadata, indent=4))
+
+        rtlil_pre_raw, aig_graph, json_data, verilog_raw, rtlil_raw, stat_txt, stat_json = yosys_synth_lattice(
+            sources_fps,
+            flow_dir,
+            yosys_bin=self.yosys_bin,
+        )
+
+        rtlil_pre_fp = flow_dir / "design__pre.rtlil"
+        rtlil_pre_fp.write_text(rtlil_pre_raw)
+
+        aig_graph_json = nx.node_link_data(aig_graph, edges="edges")
         aig_graph_fp = flow_dir / "aig_graph.json"
         aig_graph_fp.write_text(json.dumps(aig_graph_json, indent=4))
 
