@@ -354,6 +354,9 @@ def build_report(
     )
 
     designs_total = df_sources["num_designs"].sum()
+    modules_total = df_source_analysis_simple["num_modules"].sum()
+    print(f"Total designs: {designs_total}")
+    print(f"Total modules: {modules_total}")
 
     if df_source_analysis_simple is not None:
         fig_uri_num_chars_hist = build_histogram_plot(
@@ -551,6 +554,9 @@ def build_report(
     )
     html_report += (
         f"<p style='margin: 0; font-size: 20px; text-align: center;'><b>Number of Designs: {designs_total}</b></p>\n"
+    )
+    html_report += (
+        f"<p style='margin: 0; font-size: 20px; text-align: center;'><b>Number of Modules: {modules_total}</b></p>\n"
     )
     html_report += "</div>\n"
     html_report += html_table_sources
